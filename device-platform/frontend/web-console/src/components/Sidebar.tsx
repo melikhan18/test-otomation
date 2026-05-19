@@ -1,5 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { Database, LogOut, ShieldCheck, Smartphone, Target } from "lucide-react";
+import {
+  Database, FolderKanban, LogOut, ShieldCheck, Smartphone, Target,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuthStore } from "@/store/auth";
 
@@ -16,8 +18,9 @@ const sections: NavSection[] = [
   {
     title: "Automation",
     items: [
-      { to: "/automation/elements", label: "Elements",  icon: <Target size={16} /> },
-      { to: "/automation/data",     label: "Test data", icon: <Database size={16} /> },
+      { to: "/automation/workspace", label: "Workspace", icon: <FolderKanban size={16} /> },
+      { to: "/automation/elements",  label: "Elements",  icon: <Target size={16} /> },
+      { to: "/automation/data",      label: "Test data", icon: <Database size={16} /> },
     ],
   },
 ];

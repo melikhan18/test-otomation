@@ -180,6 +180,7 @@ export default function SessionPage() {
         resourceId: node.resourceId,
         text: node.text,
         contentDescription: node.contentDescription,
+        hint: node.hint,
       },
       xpathPreferred,
       xpathAbsolute,

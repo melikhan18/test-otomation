@@ -8,7 +8,9 @@ import type {
   ElementView, ElementCreate, ElementUpdate, Locator, LocatorStrategy,
 } from "@/lib/automation";
 
-const STRATEGIES: LocatorStrategy[] = ["RESOURCE_ID", "ACCESSIBILITY_ID", "TEXT", "CLASS", "XPATH"];
+const STRATEGIES: LocatorStrategy[] = [
+  "RESOURCE_ID", "ACCESSIBILITY_ID", "TEXT", "HINT", "CLASS", "UI_AUTOMATOR", "XPATH",
+];
 
 type Props = {
   mode: "create" | "edit";

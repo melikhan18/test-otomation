@@ -2,7 +2,11 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, RefreshCcw, Search, X,
 } from "lucide-react";
-import { absoluteXPath, lastSegment, preferredXPath, type UiNode } from "@/lib/xpath";
+import {
+  absoluteXPath, appiumLocators, espressoMatchers,
+  lastSegment, preferredXPath, uiAutomatorSelector, webdriverIOSelectors,
+  type LocatorSnippet, type UiNode,
+} from "@/lib/xpath";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/cn";
@@ -25,14 +29,16 @@ type FlatRow = {
   hasChildren: boolean;
 };
 
-type Scope = "all" | "id" | "class" | "text" | "desc" | "xpath";
-const SCOPES: { key: Scope; label: string }[] = [
-  { key: "all",   label: "All" },
-  { key: "id",    label: "id" },
-  { key: "class", label: "class" },
-  { key: "text",  label: "text" },
-  { key: "desc",  label: "desc" },
-  { key: "xpath", label: "xpath" },
+type Scope = "all" | "id" | "class" | "text" | "a11y" | "hint" | "pkg" | "xpath";
+const SCOPES: { key: Scope; label: string; hint: string }[] = [
+  { key: "all",   label: "All",   hint: "All attributes" },
+  { key: "id",    label: "id",    hint: "resource-id (Appium id)" },
+  { key: "a11y",  label: "a11y",  hint: "content-desc / accessibility-id" },
+  { key: "text",  label: "text",  hint: "visible text" },
+  { key: "hint",  label: "hint",  hint: "EditText placeholder" },
+  { key: "class", label: "class", hint: "android view class" },
+  { key: "pkg",   label: "pkg",   hint: "package name" },
+  { key: "xpath", label: "xpath", hint: "preferred or absolute xpath" },
 ];
 
 type MatchInfo = {
@@ -62,20 +68,26 @@ export default function InspectorPanel({
       id:    new Set(),
       class: new Set(),
       text:  new Set(),
-      desc:  new Set(),
+      a11y:  new Set(),
+      hint:  new Set(),
+      pkg:   new Set(),
       xpath: new Set(),
     };
-    const counts: Record<Scope, number> = { all: 0, id: 0, class: 0, text: 0, desc: 0, xpath: 0 };
+    const counts: Record<Scope, number> = {
+      all: 0, id: 0, class: 0, text: 0, a11y: 0, hint: 0, pkg: 0, xpath: 0,
+    };
     const perNode = new Map<UiNode, Set<Scope>>();
 
     const stack: UiNode[] = [];
     function walk(node: UiNode) {
       stack.push(node);
       const types = new Set<Scope>();
-      if (node.resourceId && node.resourceId.toLowerCase().includes(q))         types.add("id");
-      if (node.className.toLowerCase().includes(q))                             types.add("class");
-      if (node.text && node.text.toLowerCase().includes(q))                     types.add("text");
-      if (node.contentDescription && node.contentDescription.toLowerCase().includes(q)) types.add("desc");
+      if (node.resourceId && node.resourceId.toLowerCase().includes(q))                 types.add("id");
+      if (node.className.toLowerCase().includes(q))                                     types.add("class");
+      if (node.text && node.text.toLowerCase().includes(q))                             types.add("text");
+      if (node.contentDescription && node.contentDescription.toLowerCase().includes(q)) types.add("a11y");
+      if (node.hint && node.hint.toLowerCase().includes(q))                             types.add("hint");
+      if (node.packageName && node.packageName.toLowerCase().includes(q))               types.add("pkg");
       // xpath: compute for this node's path; both preferred and absolute searched.
       const path = stack.slice();
       const xp1 = preferredXPath(path).toLowerCase();
@@ -253,6 +265,7 @@ export default function InspectorPanel({
                     key={s.key}
                     onClick={() => !disabled && setScope(s.key)}
                     disabled={disabled}
+                    title={s.hint}
                     className={cn(
                       "inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-[10px] uppercase tracking-wider font-semibold border transition-colors",
                       active
@@ -326,7 +339,7 @@ function Row({
 }) {
   const { node, depth, hasChildren } = row;
   const cls = lastSegment(node.className);
-  const label = node.text || node.contentDescription;
+  const label = node.text || node.contentDescription || (node.hint ? `(${node.hint})` : undefined);
   const rowRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -513,14 +526,18 @@ function SelectionDetails({
           )}
         </div>
       </div>
-      <div className="p-3 space-y-2 max-h-[280px] overflow-auto">
-        <Field label="resource-id"  value={node.resourceId ?? ""}        mono query={query} />
-        <Field label="text"         value={node.text ?? ""}                    query={query} />
-        <Field label="content-desc" value={node.contentDescription ?? ""}      query={query} />
-        <Field label="class"        value={node.className}                mono query={query} />
-        <Field label="package"      value={node.packageName ?? ""}        mono query={query} />
-        <Field label="xpath"        value={xpath}                         mono query={query} />
-        <Field label="abs xpath"    value={absolute}                      mono query={query} />
+      <div className="p-3 space-y-2 max-h-[420px] overflow-auto">
+        <Field label="resource-id"  value={node.resourceId ?? ""}             mono query={query} />
+        <Field label="accessibility id" value={node.contentDescription ?? ""}      query={query} />
+        <Field label="text"         value={node.text ?? ""}                        query={query} />
+        <Field label="hint"         value={node.hint ?? ""}                        query={query} />
+        <Field label="input-type"   value={node.inputType ?? ""}              mono query={query} />
+        <Field label="class"        value={node.className}                    mono query={query} />
+        <Field label="package"      value={node.packageName ?? ""}            mono query={query} />
+        <Field label="index"        value={node.index != null ? String(node.index) : ""} mono query={query} />
+        <Field label="xpath"        value={xpath}                             mono query={query} />
+        <Field label="abs xpath"    value={absolute}                          mono query={query} />
+
         <div className="flex gap-1.5 flex-wrap pt-2">
           <Flag label="clickable"  on={node.clickable} />
           <Flag label="focusable"  on={!!node.focusable} />
@@ -529,7 +546,62 @@ function SelectionDetails({
           <Flag label="scrollable" on={!!node.scrollable} />
           {node.password && <Flag label="password" on />}
         </div>
+
+        <LocatorsBlock node={node} path={path} />
       </div>
+    </div>
+  );
+}
+
+/* ─────────────────  Generated locators (copy-to-clipboard)  ──────────────── */
+
+function LocatorsBlock({ node, path }: { node: UiNode; path: UiNode[] }) {
+  const groups: { title: string; items: LocatorSnippet[] }[] = [
+    { title: "Appium",       items: appiumLocators(node, path) },
+    { title: "UiAutomator",  items: uiAutomatorSelector(node).slice(0, 1) },
+    { title: "Espresso",     items: espressoMatchers(node) },
+    { title: "WebDriverIO",  items: webdriverIOSelectors(node, path) },
+  ].filter((g) => g.items.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="pt-3 mt-1 border-t border-surface-border space-y-3">
+      <div className="text-[10px] uppercase tracking-wider text-ink-muted font-semibold">
+        Test-code locators
+      </div>
+      {groups.map((g) => (
+        <div key={g.title} className="space-y-1">
+          <div className="text-[10px] uppercase tracking-wider text-brand-300 font-semibold">{g.title}</div>
+          <div className="space-y-1">
+            {g.items.map((it, i) => <LocatorRow key={i} snippet={it} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LocatorRow({ snippet }: { snippet: LocatorSnippet }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-start gap-2 group rounded-md bg-surface-raised/40 border border-surface-border px-2 py-1.5">
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] uppercase tracking-wider text-ink-muted">{snippet.label}</div>
+        <code className="block text-[11px] font-mono text-ink-primary break-all">{snippet.code}</code>
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(snippet.code);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        }}
+        className="text-ink-muted hover:text-ink-primary p-1 rounded hover:bg-surface-muted shrink-0"
+        title="Copy"
+      >
+        {copied ? <Check size={12} className="text-success-500" /> : <Copy size={12} />}
+      </button>
     </div>
   );
 }

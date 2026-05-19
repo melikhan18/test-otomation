@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.devicefarm.agent.BuildConfig
 import com.devicefarm.agent.net.EnrollmentClient
 import com.devicefarm.agent.service.AgentForegroundService
-import com.devicefarm.agent.service.CaptureBridge
 import com.devicefarm.agent.store.AgentPreferences
 import kotlinx.coroutines.launch
 

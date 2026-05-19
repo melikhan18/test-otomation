@@ -103,6 +103,282 @@ export const testDataApi = {
   delete: (id: number) => api.delete<void>(`/api/automation/test-data/${id}`).then((r) => r.data),
 };
 
+/* ─────────────────────────  Scenarios + Steps  ─────────────────────── */
+
+export type StepAction =
+  // touch + input
+  | "CLICK" | "LONG_PRESS" | "SWIPE" | "ENTER_TEXT" | "CLEAR" | "PRESS_KEY"
+  // wait
+  | "WAIT_FOR_VISIBLE" | "WAIT_FOR_INVISIBLE" | "SLEEP"
+  // visibility / presence
+  | "ASSERT_VISIBLE" | "ASSERT_NOT_VISIBLE" | "ASSERT_NOT_PRESENT"
+  // interactive state
+  | "ASSERT_ENABLED" | "ASSERT_DISABLED"
+  | "ASSERT_CHECKED" | "ASSERT_UNCHECKED"
+  | "ASSERT_SELECTED" | "ASSERT_FOCUSED"
+  // text + value content
+  | "ASSERT_TEXT_EQUALS" | "ASSERT_TEXT_CONTAINS" | "ASSERT_TEXT_MATCHES"
+  | "ASSERT_VALUE_EQUALS" | "ASSERT_ATTRIBUTE"
+  // util
+  | "SCREENSHOT" | "COMMENT";
+
+export type ElementRef = {
+  id: number;
+  name: string;
+  primaryStrategy: LocatorStrategy;
+  primaryValue: string;
+  screenshotData: string | null;
+};
+
+export type DataRef = {
+  id: number;
+  name: string;
+  environment: string;
+  sensitive: boolean;
+};
+
+export type StepView = {
+  id: number;
+  scenarioId: number;
+  orderIndex: number;
+  action: StepAction;
+  targetElement: ElementRef | null;
+  data: DataRef | null;
+  literalValue: string | null;
+  /** Xray-style expected outcome — documentation, not executed. */
+  expectedResult: string | null;
+  timeoutMs: number;
+  retryCount: number;
+  screenshotAfter: boolean;
+  createdAt: string;
+};
+
+export type ScenarioSummary = {
+  id: number;
+  productId: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  version: number;
+  stepCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ParentSuiteRef = {
+  id: number;
+  name: string;
+  tags: string[];
+};
+
+export type ScenarioView = {
+  id: number;
+  productId: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  preconditions: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  steps: StepView[];
+  /** Suites that reference this scenario — edits/deletes propagate to all of them. */
+  parentSuites: ParentSuiteRef[];
+};
+
+export type ScenarioCreate = {
+  name: string;
+  description?: string | null;
+  tags?: string[];
+  preconditions?: string | null;
+};
+export type ScenarioUpdate = ScenarioCreate;
+
+export type StepCreate = {
+  action: StepAction;
+  targetElementId?: number | null;
+  dataId?: number | null;
+  literalValue?: string | null;
+  /** Xray-style expected outcome — documentation, not executed. */
+  expectedResult?: string | null;
+  timeoutMs?: number | null;
+  retryCount?: number | null;
+  screenshotAfter?: boolean | null;
+  /** Insertion index. Omit to append at end. */
+  position?: number | null;
+};
+export type StepUpdate = Omit<StepCreate, "position">;
+
+export const scenarioApi = {
+  list:   () => api.get<ScenarioSummary[]>("/api/automation/scenarios").then((r) => r.data),
+  get:    (id: number) => api.get<ScenarioView>(`/api/automation/scenarios/${id}`).then((r) => r.data),
+  create: (body: ScenarioCreate) => api.post<ScenarioView>("/api/automation/scenarios", body).then((r) => r.data),
+  update: (id: number, body: ScenarioUpdate) =>
+    api.put<ScenarioView>(`/api/automation/scenarios/${id}`, body).then((r) => r.data),
+  delete: (id: number) => api.delete<void>(`/api/automation/scenarios/${id}`).then((r) => r.data),
+
+  addStep:    (id: number, body: StepCreate) =>
+    api.post<ScenarioView>(`/api/automation/scenarios/${id}/steps`, body).then((r) => r.data),
+  updateStep: (id: number, stepId: number, body: StepUpdate) =>
+    api.put<ScenarioView>(`/api/automation/scenarios/${id}/steps/${stepId}`, body).then((r) => r.data),
+  deleteStep: (id: number, stepId: number) =>
+    api.delete<ScenarioView>(`/api/automation/scenarios/${id}/steps/${stepId}`).then((r) => r.data),
+  reorderSteps: (id: number, stepIds: number[]) =>
+    api.put<ScenarioView>(`/api/automation/scenarios/${id}/steps/reorder`, { stepIds }).then((r) => r.data),
+};
+
+/* ─────────────────────────────  Suites  ────────────────────────────── */
+
+export type SuiteSummary = {
+  id: number;
+  productId: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  scenarioCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SuiteScenarioRef = {
+  scenarioId: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  stepCount: number;
+  orderIndex: number;
+};
+
+export type SuiteView = {
+  id: number;
+  productId: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  scenarios: SuiteScenarioRef[];
+};
+
+export type SuiteCreate = {
+  name: string;
+  description?: string | null;
+  tags?: string[];
+};
+export type SuiteUpdate = SuiteCreate;
+
+/* ────────────  Unified workspace (suites + scenarios tree)  ────────── */
+
+export type WorkspaceScenarioNode = {
+  id: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  stepCount: number;
+  version: number;
+  updatedAt: string;
+  /** Position inside parent suite — null when this node is in the orphan list. */
+  orderIndexInSuite: number | null;
+};
+
+export type WorkspaceSuiteNode = {
+  id: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  scenarioCount: number;
+  updatedAt: string;
+  scenarios: WorkspaceScenarioNode[];
+};
+
+export type WorkspaceTree = {
+  suites: WorkspaceSuiteNode[];
+  orphanScenarios: WorkspaceScenarioNode[];
+  totalScenarios: number;
+  totalSuites: number;
+};
+
+export const workspaceApi = {
+  tree: () => api.get<WorkspaceTree>("/api/automation/workspace/tree").then((r) => r.data),
+};
+
+export const suiteApi = {
+  list:    () => api.get<SuiteSummary[]>("/api/automation/suites").then((r) => r.data),
+  get:     (id: number) => api.get<SuiteView>(`/api/automation/suites/${id}`).then((r) => r.data),
+  create:  (body: SuiteCreate) => api.post<SuiteView>("/api/automation/suites", body).then((r) => r.data),
+  update:  (id: number, body: SuiteUpdate) =>
+    api.put<SuiteView>(`/api/automation/suites/${id}`, body).then((r) => r.data),
+  delete:  (id: number) => api.delete<void>(`/api/automation/suites/${id}`).then((r) => r.data),
+
+  addScenario:     (id: number, scenarioId: number) =>
+    api.post<SuiteView>(`/api/automation/suites/${id}/scenarios`, { scenarioId }).then((r) => r.data),
+  removeScenario:  (id: number, scenarioId: number) =>
+    api.delete<SuiteView>(`/api/automation/suites/${id}/scenarios/${scenarioId}`).then((r) => r.data),
+  reorderScenarios: (id: number, scenarioIds: number[]) =>
+    api.put<SuiteView>(`/api/automation/suites/${id}/scenarios/reorder`, { scenarioIds }).then((r) => r.data),
+};
+
+/* ─────────────────  Step action metadata (for editor)  ─────────────── */
+
+/** Describes what input fields each action consumes — the editor reads this to render forms. */
+export type StepActionDef = {
+  key: StepAction;
+  label: string;
+  category: "touch" | "input" | "wait" | "assert" | "util";
+  needsElement: boolean;
+  /** "none" | "data-or-literal" | "literal-only" */
+  value: "none" | "data-or-literal" | "literal-only";
+  /** Hint shown in the literal-only input for actions like SLEEP, PRESS_KEY etc. */
+  literalLabel?: string;
+  /** Has its own timeout config (waitForVisible etc.). */
+  hasTimeout?: boolean;
+  /** Color tint for the node. */
+  tone: "blue" | "green" | "amber" | "violet" | "gray";
+};
+
+export const STEP_ACTIONS: StepActionDef[] = [
+  /* ─────────────  Touch + Input  ───────────── */
+  { key: "CLICK",                label: "Click",                category: "touch",  needsElement: true,  value: "none",            tone: "blue" },
+  { key: "LONG_PRESS",           label: "Long press",           category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "duration ms (default 1000)", tone: "blue" },
+  { key: "SWIPE",                label: "Swipe",                category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "direction: up/down/left/right", tone: "blue" },
+  { key: "ENTER_TEXT",           label: "Enter text",           category: "input",  needsElement: true,  value: "data-or-literal", tone: "green" },
+  { key: "CLEAR",                label: "Clear input",          category: "input",  needsElement: true,  value: "none",            tone: "green" },
+  { key: "PRESS_KEY",            label: "Press key",            category: "input",  needsElement: false, value: "literal-only",    literalLabel: "BACK | HOME | RECENTS | <keyCode>", tone: "green" },
+
+  /* ─────────────  Wait  ───────────── */
+  { key: "WAIT_FOR_VISIBLE",     label: "Wait for visible",     category: "wait",   needsElement: true,  value: "none",            hasTimeout: true, tone: "amber" },
+  { key: "WAIT_FOR_INVISIBLE",   label: "Wait for invisible",   category: "wait",   needsElement: true,  value: "none",            hasTimeout: true, tone: "amber" },
+  { key: "SLEEP",                label: "Sleep",                category: "wait",   needsElement: false, value: "literal-only",    literalLabel: "milliseconds", tone: "amber" },
+
+  /* ─────────────  Verify · visibility & presence  ───────────── */
+  { key: "ASSERT_VISIBLE",       label: "Verify visible",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_NOT_VISIBLE",   label: "Verify hidden",        category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_NOT_PRESENT",   label: "Verify not present",   category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+
+  /* ─────────────  Verify · interactive state  ───────────── */
+  { key: "ASSERT_ENABLED",       label: "Verify enabled",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_DISABLED",      label: "Verify disabled",      category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_CHECKED",       label: "Verify checked",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_UNCHECKED",     label: "Verify unchecked",     category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_SELECTED",      label: "Verify selected",      category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_FOCUSED",       label: "Verify focused",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+
+  /* ─────────────  Verify · text + value content  ───────────── */
+  { key: "ASSERT_TEXT_EQUALS",   label: "Verify text equals",   category: "assert", needsElement: true,  value: "data-or-literal", tone: "violet" },
+  { key: "ASSERT_TEXT_CONTAINS", label: "Verify text contains", category: "assert", needsElement: true,  value: "data-or-literal", tone: "violet" },
+  { key: "ASSERT_TEXT_MATCHES",  label: "Verify text matches",  category: "assert", needsElement: true,  value: "data-or-literal", literalLabel: "regex (e.g. ^[A-Z]{3}\\d+$)", tone: "violet" },
+  { key: "ASSERT_VALUE_EQUALS",  label: "Verify value equals",  category: "assert", needsElement: true,  value: "data-or-literal", literalLabel: "expected EditText value", tone: "violet" },
+  { key: "ASSERT_ATTRIBUTE",     label: "Verify attribute",     category: "assert", needsElement: true,  value: "literal-only",    literalLabel: "attribute=value (e.g. enabled=true)", tone: "violet" },
+
+  /* ─────────────  Util  ───────────── */
+  { key: "SCREENSHOT",           label: "Screenshot",           category: "util",   needsElement: false, value: "literal-only",    literalLabel: "label (e.g. login-done)", tone: "gray" },
+  { key: "COMMENT",              label: "Comment",              category: "util",   needsElement: false, value: "literal-only",    literalLabel: "free-form note", tone: "gray" },
+];
+
+export const STEP_ACTION_MAP: Record<StepAction, StepActionDef> = Object.fromEntries(
+  STEP_ACTIONS.map((d) => [d.key, d]),
+) as Record<StepAction, StepActionDef>;
+
 /* ─────────────────  Locator generation from inspector  ───────────── */
 
 /** Ordered list of candidate locators for a node — most reliable first. */
