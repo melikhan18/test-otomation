@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Device Farm Agent</string>
+    <string name="notification_channel_name">Agent Status</string>
+    <string name="notification_channel_desc">Agent connection status</string>
+    <string name="accessibility_service_label">Device Farm Agent</string>
+    <string name="accessibility_service_desc">Allows remote tap/swipe and UI inspection from the Device Farm web console.</string>
+</resources>

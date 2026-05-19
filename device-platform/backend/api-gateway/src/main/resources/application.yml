@@ -1,0 +1,70 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      httpserver:
+        wiretap: false
+      httpclient:
+        websocket:
+          # Default is 64 KB which truncates H.264 keyframes. Match the bridge ceiling.
+          max-frame-payload-length: 10485760
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+      routes:
+        - id: auth
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/**
+        - id: devices
+          uri: ${SVC_DEVICE:http://localhost:8082}
+          predicates:
+            - Path=/api/devices/**,/api/agent/**
+        - id: sessions
+          uri: ${SVC_SESSION:http://localhost:8083}
+          predicates:
+            - Path=/api/sessions/**
+        - id: bridge-ws
+          uri: ${SVC_BRIDGE_WS:ws://localhost:8084}
+          predicates:
+            - Path=/ws/**
+        - id: bridge-http
+          uri: ${SVC_BRIDGE:http://localhost:8084}
+          predicates:
+            - Path=/api/bridge/**
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowed-headers:
+              - "*"
+            allow-credentials: true
+            max-age: 3600
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
+    issuer: device-platform
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+
+logging:
+  level:
+    com.devicefarm: DEBUG
+    org.springframework.cloud.gateway: INFO

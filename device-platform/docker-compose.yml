@@ -1,0 +1,126 @@
+name: device-platform
+
+# Full-stack compose: infrastructure + all backend services.
+# For local development you can run only the infra and start each service in your IDE:
+#   docker compose -f deploy/docker-compose/infrastructure.yml up -d
+#
+# The first `docker compose up --build` will pull a Gradle builder image and compile
+# every backend module — that takes a few minutes. Subsequent runs reuse the layer cache.
+
+x-service-env: &service-env
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_NAME: device_platform
+  DB_USER: dp
+  DB_PASSWORD: dp_dev_password
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  # Override JWT_SECRET in production. Must be base64 of at least 64 bytes.
+  JWT_SECRET: Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: device_platform
+      POSTGRES_USER: dp
+      POSTGRES_PASSWORD: dp_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - dp_pgdata:/var/lib/postgresql/data
+      - ./deploy/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dp -d device_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "no", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  auth-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: auth-service
+    environment:
+      <<: *service-env
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: Admin@123
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    ports:
+      - "8081:8081"
+
+  device-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: device-service
+    environment:
+      <<: *service-env
+      # Spring relaxed-binding: APP_BRIDGE_PUBLIC_WS_URL → app.bridge.public-ws-url
+      APP_BRIDGE_PUBLIC_WS_URL: ws://localhost:8080/ws/agent
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    ports:
+      - "8082:8082"
+
+  session-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: session-service
+    environment:
+      <<: *service-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    ports:
+      - "8083:8083"
+
+  device-bridge-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: device-bridge-service
+    environment:
+      <<: *service-env
+    depends_on:
+      redis: { condition: service_healthy }
+    ports:
+      - "8084:8084"
+
+  api-gateway:
+    build:
+      context: ./backend
+      args:
+        SERVICE: api-gateway
+    environment:
+      <<: *service-env
+      SVC_AUTH:      http://auth-service:8081
+      SVC_DEVICE:    http://device-service:8082
+      SVC_SESSION:   http://session-service:8083
+      SVC_BRIDGE:    http://device-bridge-service:8084
+      SVC_BRIDGE_WS: ws://device-bridge-service:8084
+    depends_on:
+      - auth-service
+      - device-service
+      - session-service
+      - device-bridge-service
+    ports:
+      - "8080:8080"
+
+volumes:
+  dp_pgdata:

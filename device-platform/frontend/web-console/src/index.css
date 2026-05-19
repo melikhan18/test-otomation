@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-surface text-ink-primary font-sans antialiased;
+    font-feature-settings: "cv02","cv03","cv04","ss01";
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: theme('colors.surface.muted');
+    border-radius: 999px;
+    border: 2px solid theme('colors.surface.DEFAULT');
+  }
+  ::-webkit-scrollbar-thumb:hover { background: theme('colors.surface.border'); }
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(59,110,240,0.55);
+    border-radius: 0.375rem;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-surface-border bg-surface-raised shadow-card;
+  }
+  .input {
+    @apply w-full rounded-md bg-surface border border-surface-border px-3 py-2 text-sm
+           text-ink-primary placeholder:text-ink-muted outline-none
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 transition-colors;
+  }
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted;
+  }
+  .kbd {
+    @apply px-1.5 py-0.5 rounded border border-surface-border bg-surface text-[10px]
+           font-mono text-ink-secondary;
+  }
+}
