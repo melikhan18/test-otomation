@@ -11,6 +11,7 @@ COPY device-service/ device-service/
 COPY session-service/ session-service/
 COPY device-bridge-service/ device-bridge-service/
 COPY api-gateway/ api-gateway/
+COPY automation-service/ automation-service/
 ARG SERVICE
 RUN gradle :${SERVICE}:bootJar --no-daemon -x test
 

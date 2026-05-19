@@ -1,12 +1,25 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { LogOut, ShieldCheck, Smartphone } from "lucide-react";
+import { Database, LogOut, ShieldCheck, Smartphone, Target } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuthStore } from "@/store/auth";
 
-type NavItem = { to: string; label: string; icon: React.ReactNode; end?: boolean };
+type NavItem = { to: string; label: string; icon: React.ReactNode };
+type NavSection = { title: string; items: NavItem[] };
 
-const items: NavItem[] = [
-  { to: "/devices", label: "Devices", icon: <Smartphone size={16} /> },
+const sections: NavSection[] = [
+  {
+    title: "Workspace",
+    items: [
+      { to: "/devices", label: "Devices", icon: <Smartphone size={16} /> },
+    ],
+  },
+  {
+    title: "Automation",
+    items: [
+      { to: "/automation/elements", label: "Elements",  icon: <Target size={16} /> },
+      { to: "/automation/data",     label: "Test data", icon: <Database size={16} /> },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -29,23 +42,28 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
-        <div className="label px-2 mb-2">Workspace</div>
-        {items.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            end={it.end}
-            className={({ isActive }) => cn(
-              "group flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors",
-              isActive
-                ? "bg-surface-muted text-ink-primary"
-                : "text-ink-secondary hover:text-ink-primary hover:bg-surface-muted/60",
-            )}
-          >
-            <span className="text-ink-muted group-hover:text-ink-secondary">{it.icon}</span>
-            <span>{it.label}</span>
-          </NavLink>
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        {sections.map((section) => (
+          <div key={section.title}>
+            <div className="label px-2 mb-2">{section.title}</div>
+            <div className="space-y-0.5">
+              {section.items.map((it) => (
+                <NavLink
+                  key={it.to}
+                  to={it.to}
+                  className={({ isActive }) => cn(
+                    "group flex items-center gap-3 px-2.5 py-2 rounded-md text-sm transition-colors",
+                    isActive
+                      ? "bg-surface-muted text-ink-primary"
+                      : "text-ink-secondary hover:text-ink-primary hover:bg-surface-muted/60",
+                  )}
+                >
+                  <span className="text-ink-muted group-hover:text-ink-secondary">{it.icon}</span>
+                  <span>{it.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 

@@ -35,6 +35,10 @@ spring:
           uri: ${SVC_BRIDGE:http://localhost:8084}
           predicates:
             - Path=/api/bridge/**
+        - id: automation
+          uri: ${SVC_AUTOMATION:http://localhost:8085}
+          predicates:
+            - Path=/api/automation/**
       globalcors:
         cors-configurations:
           '[/**]':

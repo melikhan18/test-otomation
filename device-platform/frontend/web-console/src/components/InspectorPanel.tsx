@@ -14,6 +14,8 @@ type Props = {
   onRefresh: () => void;
   selectedPath: UiNode[] | null;
   onSelect: (path: UiNode[] | null) => void;
+  /** Optional: enables the "Save as element" action on the selection details. */
+  onSaveAsElement?: (path: UiNode[]) => void;
 };
 
 type FlatRow = {
@@ -45,7 +47,7 @@ type MatchInfo = {
 const INDENT_PX = 14;
 
 export default function InspectorPanel({
-  tree, error, busy, onRefresh, selectedPath, onSelect,
+  tree, error, busy, onRefresh, selectedPath, onSelect, onSaveAsElement,
 }: Props) {
   const [search, setSearch] = useState("");
   const [scope, setScope] = useState<Scope>("all");
@@ -296,7 +298,13 @@ export default function InspectorPanel({
             ))}
           </div>
 
-          {selectedPath && selectedPath.length > 0 && <SelectionDetails path={selectedPath} query={search} />}
+          {selectedPath && selectedPath.length > 0 && (
+            <SelectionDetails
+              path={selectedPath}
+              query={search}
+              onSaveAsElement={onSaveAsElement ? () => onSaveAsElement(selectedPath) : undefined}
+            />
+          )}
         </>
       )}
     </div>
@@ -481,16 +489,29 @@ function fullLabel(n: UiNode): string {
 
 /* ─────────────────────  Selection details  ──────────────────────── */
 
-function SelectionDetails({ path, query }: { path: UiNode[]; query: string }) {
+function SelectionDetails({
+  path, query, onSaveAsElement,
+}: { path: UiNode[]; query: string; onSaveAsElement?: () => void }) {
   const node = path[path.length - 1];
   const xpath = preferredXPath(path);
   const absolute = absoluteXPath(path);
 
   return (
     <div className="rounded-md border border-surface-border bg-surface text-xs shrink-0">
-      <div className="px-3 py-2 border-b border-surface-border flex items-center justify-between">
-        <span className="font-semibold text-ink-primary font-mono">{lastSegment(node.className)}</span>
-        <span className="text-ink-muted font-mono text-[10px]">[{node.bounds.join(", ")}]</span>
+      <div className="px-3 py-2 border-b border-surface-border flex items-center justify-between gap-2">
+        <span className="font-semibold text-ink-primary font-mono truncate">{lastSegment(node.className)}</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-ink-muted font-mono text-[10px]">[{node.bounds.join(", ")}]</span>
+          {onSaveAsElement && (
+            <button
+              onClick={onSaveAsElement}
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded border border-brand-500/40 bg-brand-500/10 text-brand-300 hover:bg-brand-500/20"
+              title="Save this node into the element repository"
+            >
+              + Save element
+            </button>
+          )}
+        </div>
       </div>
       <div className="p-3 space-y-2 max-h-[280px] overflow-auto">
         <Field label="resource-id"  value={node.resourceId ?? ""}        mono query={query} />

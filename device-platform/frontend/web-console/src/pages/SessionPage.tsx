@@ -13,10 +13,15 @@ import DeviceVideoPlayer, { type DeviceVideoPlayerHandle } from "@/components/De
 import TouchOverlay from "@/components/TouchOverlay";
 import InspectorPanel from "@/components/InspectorPanel";
 import InspectorCanvas from "@/components/InspectorCanvas";
+import ElementEditor from "@/components/automation/ElementEditor";
 import { sessionApi } from "@/lib/sessions";
 import { KeyCodes, openControlSocket, type StreamMetadata } from "@/lib/sessionSocket";
-import type { UiNode } from "@/lib/xpath";
+import { absoluteXPath, preferredXPath, type UiNode } from "@/lib/xpath";
 import { useAuthStore } from "@/store/auth";
+import {
+  cropSnapshotForElement, elementApi, generateLocators, suggestElementName,
+  type ElementCreate,
+} from "@/lib/automation";
 
 // Module-scope map of pending "auto-release" timers keyed by sessionId.
 // Lets a fresh mount cancel a queued end (StrictMode dev double-mount, fast back-and-forth nav).
@@ -147,6 +152,77 @@ export default function SessionPage() {
         pendingInspectId.current = null;
       }
     }, 8000);
+  }
+
+  /* ── Save selected node as a reusable element ─────────────────────────────────────── */
+
+  const [saveElement, setSaveElement] = useState<{
+    initial: Partial<ElementCreate>;
+    snapshot: {
+      dataUrl: string | null;
+      bounds: string | null;
+      className: string | null;
+      text: string | null;
+      resourceId: string | null;
+    };
+  } | null>(null);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function openSaveElement(path: UiNode[]) {
+    if (!path.length) return;
+    const node = path[path.length - 1];
+    const xpathPreferred = preferredXPath(path);
+    const xpathAbsolute  = absoluteXPath(path);
+    const { primary, fallbacks } = generateLocators(
+      {
+        className: node.className,
+        resourceId: node.resourceId,
+        text: node.text,
+        contentDescription: node.contentDescription,
+      },
+      xpathPreferred,
+      xpathAbsolute,
+    );
+
+    let thumbnail: string | null = null;
+    if (inspectSnapshot && meta) {
+      thumbnail = await cropSnapshotForElement(inspectSnapshot, node.bounds, meta.realWidth, meta.realHeight);
+    }
+
+    setSaveError(null);
+    setSaveElement({
+      initial: {
+        name: suggestElementName({
+          className: node.className,
+          resourceId: node.resourceId,
+          text: node.text,
+          contentDescription: node.contentDescription,
+        }),
+        primaryStrategy: primary.strategy,
+        primaryValue: primary.value,
+        fallbackLocators: fallbacks,
+      },
+      snapshot: {
+        dataUrl: thumbnail,
+        bounds: `[${node.bounds.join(",")}]`,
+        className: node.className,
+        text: node.text ?? null,
+        resourceId: node.resourceId ?? null,
+      },
+    });
+  }
+
+  async function submitElement(payload: ElementCreate) {
+    setSaveBusy(true); setSaveError(null);
+    try {
+      await elementApi.create(payload);
+      setSaveElement(null);
+    } catch (e: any) {
+      setSaveError(e?.response?.data?.detail ?? "could not save element");
+    } finally {
+      setSaveBusy(false);
+    }
   }
 
   const liveAspect = useMemo(
@@ -292,6 +368,7 @@ export default function SessionPage() {
               onRefresh={runInspect}
               selectedPath={inspectSelected}
               onSelect={setInspectSelected}
+              onSaveAsElement={openSaveElement}
             />
           </Card>
         </div>
@@ -314,6 +391,18 @@ export default function SessionPage() {
           </div>
         </div>
       </div>
+
+      {saveElement && (
+        <ElementEditor
+          mode="create"
+          initial={saveElement.initial}
+          snapshot={saveElement.snapshot}
+          busy={saveBusy}
+          error={saveError}
+          onClose={() => setSaveElement(null)}
+          onSubmit={(payload) => submitElement(payload as ElementCreate)}
+        />
+      )}
     </>
   );
 }

@@ -102,6 +102,18 @@ services:
     ports:
       - "8084:8084"
 
+  automation-service:
+    build:
+      context: ./backend
+      args:
+        SERVICE: automation-service
+    environment:
+      <<: *service-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports:
+      - "8085:8085"
+
   api-gateway:
     build:
       context: ./backend
@@ -109,16 +121,18 @@ services:
         SERVICE: api-gateway
     environment:
       <<: *service-env
-      SVC_AUTH:      http://auth-service:8081
-      SVC_DEVICE:    http://device-service:8082
-      SVC_SESSION:   http://session-service:8083
-      SVC_BRIDGE:    http://device-bridge-service:8084
-      SVC_BRIDGE_WS: ws://device-bridge-service:8084
+      SVC_AUTH:       http://auth-service:8081
+      SVC_DEVICE:     http://device-service:8082
+      SVC_SESSION:    http://session-service:8083
+      SVC_BRIDGE:     http://device-bridge-service:8084
+      SVC_BRIDGE_WS:  ws://device-bridge-service:8084
+      SVC_AUTOMATION: http://automation-service:8085
     depends_on:
       - auth-service
       - device-service
       - session-service
       - device-bridge-service
+      - automation-service
     ports:
       - "8080:8080"
 

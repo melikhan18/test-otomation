@@ -3,6 +3,8 @@ import { useAuthStore } from "@/store/auth";
 import LoginPage from "@/pages/LoginPage";
 import DevicesPage from "@/pages/DevicesPage";
 import SessionPage from "@/pages/SessionPage";
+import ElementsPage from "@/pages/automation/ElementsPage";
+import DataPage from "@/pages/automation/DataPage";
 import AppLayout from "@/components/AppLayout";
 
 function RequireAuth() {
@@ -22,6 +24,9 @@ export const router = createBrowserRouter([
           { path: "/", element: <Navigate to="/devices" replace /> },
           { path: "/devices", element: <DevicesPage /> },
           { path: "/sessions/:sessionId", element: <SessionPage /> },
+          { path: "/automation", element: <Navigate to="/automation/elements" replace /> },
+          { path: "/automation/elements", element: <ElementsPage /> },
+          { path: "/automation/data", element: <DataPage /> },
         ],
       },
     ],
