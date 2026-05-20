@@ -95,7 +95,18 @@ public class SuiteRunService {
                 sr.getId(), sr.getProductId(), sr.getSuiteId(), sr.getSuiteName(),
                 sr.getDeviceId(), sr.getEnvironment(), sr.getStatus(),
                 sr.getTotalScenarios(), sr.getPassedScenarios(), sr.getFailedScenarios(),
-                sr.getDurationMs(), sr.getCreatedAt(), sr.getStartedAt(), sr.getFinishedAt());
+                sr.getDurationMs(),
+                Tags.asList(sr.getTags()),
+                sr.getCreatedAt(), sr.getStartedAt(), sr.getFinishedAt());
+    }
+
+    /** Replace the tag set on a suite run. */
+    @Transactional
+    public SuiteRunDtos.View updateTags(JwtPrincipal caller, long id, List<String> tags) {
+        SuiteRunEntity sr = ensureOwned(caller, id);
+        sr.setTags(Tags.normalize(tags));
+        suiteRuns.save(sr);
+        return toView(sr);
     }
 
     private SuiteRunDtos.View toView(SuiteRunEntity sr) {
@@ -126,6 +137,7 @@ public class SuiteRunService {
                 sr.getStartedAt(), sr.getFinishedAt(), sr.getDurationMs(),
                 sr.getTotalScenarios(), sr.getPassedScenarios(), sr.getFailedScenarios(),
                 sr.getErrorSummary(),
+                Tags.asList(sr.getTags()),
                 sr.getCreatedAt(),
                 children
         );

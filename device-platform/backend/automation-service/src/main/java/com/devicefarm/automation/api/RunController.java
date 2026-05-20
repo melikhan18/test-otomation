@@ -41,4 +41,11 @@ public class RunController {
         if (jwt == null) throw ApiException.unauthorized("missing Authorization header");
         return service.create(caller, req, jwt);
     }
+
+    @PatchMapping("/{id}/tags")
+    public RunDtos.View updateTags(@AuthenticationPrincipal JwtPrincipal caller,
+                                   @PathVariable long id,
+                                   @RequestBody RunDtos.TagsRequest req) {
+        return service.updateTags(caller, id, req.tags());
+    }
 }

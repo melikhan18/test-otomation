@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertOctagon, ArrowLeft, CheckCircle2, Clock, Hourglass, MinusCircle, PauseCircle, RefreshCcw, X, XCircle,
+  AlertOctagon, CheckCircle2, Clock, Hourglass, MinusCircle, PauseCircle, RefreshCcw, X, XCircle,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import ReportNav from "@/components/automation/ReportNav";
+import TagEditor from "@/components/automation/TagEditor";
 import {
   runApi, STEP_ACTION_MAP, type RunStatus, type RunView, type StepResultStatus, type StepResultView,
 } from "@/lib/automation";
+import { distinctTags, useReportFeed } from "@/lib/reports";
 import { cn } from "@/lib/cn";
 
 export default function RunDetailPage() {
@@ -31,18 +34,40 @@ export default function RunDetailPage() {
     },
   });
 
-  useEffect(() => { /* page is polling */ }, [runQ.data?.status]);
+  // Pre-warm the feed cache so ReportNav's prev/next render instantly when arriving here
+  // via a direct URL (refresh, deep link). Cheap when cache is already populated.
+  const feed = useReportFeed();
+  const suggestions = distinctTags(feed.items);
+
+  // J / K keyboard shortcuts for fast browsing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLElement &&
+          (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) return;
+      const cur = feed.items.findIndex((f) => f.kind === "run" && f.item.id === id);
+      if (cur < 0) return;
+      if (e.key === "j") {
+        const p = feed.items[cur - 1];
+        if (p) nav(p.kind === "suite" ? `/automation/suite-runs/${p.item.id}` : `/automation/runs/${p.item.id}`);
+      } else if (e.key === "k") {
+        const n = feed.items[cur + 1];
+        if (n) nav(n.kind === "suite" ? `/automation/suite-runs/${n.item.id}` : `/automation/runs/${n.item.id}`);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [feed.items, id, nav]);
 
   if (runQ.isLoading) {
     return <>
-      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Runs" }, { label: "Loading…" }]} />
-      <div className="p-6 text-ink-muted text-sm flex items-center gap-2"><Spinner /> Loading run…</div>
+      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Reports", to: "/automation/reports" }, { label: "Loading…" }]} />
+      <div className="p-6 text-ink-muted text-sm flex items-center gap-2"><Spinner /> Loading report…</div>
     </>;
   }
   if (runQ.error || !runQ.data) {
     return <>
-      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Runs" }, { label: "Not found" }]} />
-      <div className="p-6 text-danger-500">Run not found</div>
+      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Reports", to: "/automation/reports" }, { label: "Not found" }]} />
+      <div className="p-6 text-danger-500">Report not found</div>
     </>;
   }
   const run = runQ.data;
@@ -52,14 +77,12 @@ export default function RunDetailPage() {
       <TopBar
         crumbs={[
           { label: "Automation", to: "/automation" },
-          { label: "Runs",       to: "/automation/runs" },
-          { label: `Run ${run.id}` },
+          { label: "Reports",    to: "/automation/reports" },
+          { label: `#${run.id}` },
         ]}
         actions={
           <>
-            <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={() => nav("/automation/runs")}>
-              Back
-            </Button>
+            <ReportNav current={{ kind: "run", id }} />
             <Button variant="ghost" size="sm"
               leftIcon={<RefreshCcw size={12} className={runQ.isFetching ? "animate-spin" : undefined} />}
               onClick={() => runQ.refetch()}>
@@ -70,7 +93,7 @@ export default function RunDetailPage() {
       />
 
       <div className="px-6 py-6 space-y-4">
-        <RunHeader run={run} />
+        <RunHeader run={run} suggestions={suggestions} />
         {run.videoUrl && <RunVideo url={run.videoUrl} />}
         <StepTimeline run={run} />
       </div>
@@ -106,7 +129,15 @@ function RunVideo({ url }: { url: string }) {
 
 /* ─────────────────────────────  Header  ────────────────────────────── */
 
-function RunHeader({ run }: { run: RunView }) {
+function RunHeader({ run, suggestions }: { run: RunView; suggestions: string[] }) {
+  const qc = useQueryClient();
+  const tagsMut = useMutation({
+    mutationFn: (tags: string[]) => runApi.updateTags(run.id, tags),
+    onSuccess: (next) => {
+      qc.setQueryData(["automation-run", run.id], next);
+      qc.invalidateQueries({ queryKey: ["automation-runs"] });
+    },
+  });
   const passRate = run.totalSteps > 0 ? (run.passedSteps / run.totalSteps) * 100 : 0;
   const tone = statusTone(run.status);
   return (
@@ -132,6 +163,13 @@ function RunHeader({ run }: { run: RunView }) {
             </span>
             <span>created {new Date(run.createdAt).toLocaleTimeString()}</span>
             {run.durationMs != null && <span>· {(run.durationMs / 1000).toFixed(1)}s</span>}
+          </div>
+          <div className="mt-2">
+            <TagEditor
+              tags={run.tags ?? []}
+              suggestions={suggestions}
+              onChange={(next) => tagsMut.mutateAsync(next).then(() => undefined)}
+            />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3 text-right">

@@ -1,6 +1,8 @@
 package com.devicefarm.automation.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -56,6 +58,11 @@ public class RunEntity {
     @Column(name = "adaptive_wait", nullable = false)
     private boolean adaptiveWait = false;
 
+    /** Free-form labels for filtering & grouping in the reports feed. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(columnDefinition = "TEXT[]", nullable = false)
+    private String[] tags = new String[0];
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -92,5 +99,6 @@ public class RunEntity {
     public String getVideoUrl() { return videoUrl; }          public void setVideoUrl(String v) { this.videoUrl = v; }
     public int getInterStepDelayMs() { return interStepDelayMs; } public void setInterStepDelayMs(int v) { this.interStepDelayMs = v; }
     public boolean isAdaptiveWait() { return adaptiveWait; }      public void setAdaptiveWait(boolean v) { this.adaptiveWait = v; }
+    public String[] getTags() { return tags; }                    public void setTags(String[] v) { this.tags = v == null ? new String[0] : v; }
     public Instant getCreatedAt() { return createdAt; }
 }

@@ -319,6 +319,11 @@ export type RunSummary = {
   passedSteps: number;
   failedSteps: number;
   durationMs: number | null;
+  /** Public URL of the recorded MP4, if recording succeeded. */
+  videoUrl: string | null;
+  /** Set when this run was part of a suite. */
+  suiteRunId: number | null;
+  tags: string[];
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -362,6 +367,7 @@ export type RunView = {
   adaptiveWait: boolean;
   /** Public URL of the recorded MP4. Null if recording was skipped or failed. */
   videoUrl: string | null;
+  tags: string[];
   createdAt: string;
   stepResults: StepResultView[];
 };
@@ -381,6 +387,8 @@ export const runApi = {
     api.get<RunSummary[]>("/api/automation/runs", { params: scenarioId ? { scenarioId } : {} }).then((r) => r.data),
   get:    (id: number) => api.get<RunView>(`/api/automation/runs/${id}`).then((r) => r.data),
   create: (body: RunCreate) => api.post<RunView>("/api/automation/runs", body).then((r) => r.data),
+  updateTags: (id: number, tags: string[]) =>
+    api.patch<RunView>(`/api/automation/runs/${id}/tags`, { tags }).then((r) => r.data),
 };
 
 /* ───────────────────────────  Suite runs  ──────────────────────────── */
@@ -399,6 +407,7 @@ export type SuiteRunSummary = {
   passedScenarios: number;
   failedScenarios: number;
   durationMs: number | null;
+  tags: string[];
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -435,6 +444,7 @@ export type SuiteRunView = {
   passedScenarios: number;
   failedScenarios: number;
   errorSummary: string | null;
+  tags: string[];
   createdAt: string;
   runs: SuiteRunChild[];
 };
@@ -452,6 +462,8 @@ export const suiteRunApi = {
     api.get<SuiteRunSummary[]>("/api/automation/suite-runs", { params: suiteId ? { suiteId } : {} }).then((r) => r.data),
   get:    (id: number) => api.get<SuiteRunView>(`/api/automation/suite-runs/${id}`).then((r) => r.data),
   create: (body: SuiteRunCreate) => api.post<SuiteRunView>("/api/automation/suite-runs", body).then((r) => r.data),
+  updateTags: (id: number, tags: string[]) =>
+    api.patch<SuiteRunView>(`/api/automation/suite-runs/${id}/tags`, { tags }).then((r) => r.data),
 };
 
 export const suiteApi = {

@@ -95,8 +95,22 @@ public class RunService {
                 r.getScenarioId() != null ? names.get(r.getScenarioId()) : null,
                 r.getDeviceId(), r.getEnvironment(), r.getStatus(),
                 r.getTotalSteps(), r.getPassedSteps(), r.getFailedSteps(),
-                r.getDurationMs(), r.getCreatedAt(), r.getStartedAt(), r.getFinishedAt()
+                r.getDurationMs(),
+                r.getVideoUrl(), r.getSuiteRunId(),
+                Tags.asList(r.getTags()),
+                r.getCreatedAt(), r.getStartedAt(), r.getFinishedAt()
         )).toList();
+    }
+
+    /** Replace the tag set on a run. Returns the refreshed view so the UI can render. */
+    @Transactional
+    public RunDtos.View updateTags(JwtPrincipal caller, long id, List<String> tags) {
+        RunEntity run = ensureOwned(caller, id);
+        run.setTags(Tags.normalize(tags));
+        runs.save(run);
+        ScenarioEntity sc = run.getScenarioId() != null
+                ? scenarios.findById(run.getScenarioId()).orElse(null) : null;
+        return toView(run, sc);
     }
 
     /* ──────────────────────  helpers  ──────────────────────── */
@@ -128,6 +142,7 @@ public class RunService {
                 r.getInterStepDelayMs(),
                 r.isAdaptiveWait(),
                 r.getVideoUrl(),
+                Tags.asList(r.getTags()),
                 r.getCreatedAt(),
                 rows
         );

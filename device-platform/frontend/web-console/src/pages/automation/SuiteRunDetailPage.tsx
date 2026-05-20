@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertOctagon, ArrowLeft, CheckCircle2, ChevronRight, Clock, Hourglass, MinusCircle,
+  AlertOctagon, CheckCircle2, ChevronRight, Clock, Hourglass, MinusCircle,
   PauseCircle, RefreshCcw, XCircle,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
@@ -9,9 +10,12 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import ReportNav from "@/components/automation/ReportNav";
+import TagEditor from "@/components/automation/TagEditor";
 import {
   suiteRunApi, type RunStatus, type SuiteRunChild, type SuiteRunStatus, type SuiteRunView,
 } from "@/lib/automation";
+import { distinctTags, useReportFeed } from "@/lib/reports";
 import { cn } from "@/lib/cn";
 
 export default function SuiteRunDetailPage() {
@@ -31,16 +35,37 @@ export default function SuiteRunDetailPage() {
     },
   });
 
+  const feed = useReportFeed();
+  const suggestions = distinctTags(feed.items);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLElement &&
+          (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) return;
+      const cur = feed.items.findIndex((f) => f.kind === "suite" && f.item.id === id);
+      if (cur < 0) return;
+      if (e.key === "j") {
+        const p = feed.items[cur - 1];
+        if (p) nav(p.kind === "suite" ? `/automation/suite-runs/${p.item.id}` : `/automation/runs/${p.item.id}`);
+      } else if (e.key === "k") {
+        const n = feed.items[cur + 1];
+        if (n) nav(n.kind === "suite" ? `/automation/suite-runs/${n.item.id}` : `/automation/runs/${n.item.id}`);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [feed.items, id, nav]);
+
   if (q.isLoading) {
     return <>
-      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Suite runs" }, { label: "Loading…" }]} />
-      <div className="p-6 text-ink-muted text-sm flex items-center gap-2"><Spinner /> Loading suite run…</div>
+      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Reports", to: "/automation/reports" }, { label: "Loading…" }]} />
+      <div className="p-6 text-ink-muted text-sm flex items-center gap-2"><Spinner /> Loading report…</div>
     </>;
   }
   if (q.error || !q.data) {
     return <>
-      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Suite runs" }, { label: "Not found" }]} />
-      <div className="p-6 text-danger-500">Suite run not found</div>
+      <TopBar crumbs={[{ label: "Automation", to: "/automation" }, { label: "Reports", to: "/automation/reports" }, { label: "Not found" }]} />
+      <div className="p-6 text-danger-500">Report not found</div>
     </>;
   }
   const sr = q.data;
@@ -50,14 +75,12 @@ export default function SuiteRunDetailPage() {
       <TopBar
         crumbs={[
           { label: "Automation", to: "/automation" },
-          { label: "Suite runs" },
-          { label: `Suite run #${sr.id}` },
+          { label: "Reports",    to: "/automation/reports" },
+          { label: `Suite #${sr.id}` },
         ]}
         actions={
           <>
-            <Button variant="ghost" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={() => nav("/automation")}>
-              Back
-            </Button>
+            <ReportNav current={{ kind: "suite", id }} />
             <Button variant="ghost" size="sm"
               leftIcon={<RefreshCcw size={12} className={q.isFetching ? "animate-spin" : undefined} />}
               onClick={() => q.refetch()}>
@@ -68,7 +91,7 @@ export default function SuiteRunDetailPage() {
       />
 
       <div className="px-6 py-6 space-y-4">
-        <Header sr={sr} />
+        <Header sr={sr} suggestions={suggestions} />
         <ChildList sr={sr} />
       </div>
     </>
@@ -77,7 +100,15 @@ export default function SuiteRunDetailPage() {
 
 /* ─────────────────────────────  Header  ────────────────────────────── */
 
-function Header({ sr }: { sr: SuiteRunView }) {
+function Header({ sr, suggestions }: { sr: SuiteRunView; suggestions: string[] }) {
+  const qc = useQueryClient();
+  const tagsMut = useMutation({
+    mutationFn: (tags: string[]) => suiteRunApi.updateTags(sr.id, tags),
+    onSuccess: (next) => {
+      qc.setQueryData(["automation-suite-run", sr.id], next);
+      qc.invalidateQueries({ queryKey: ["automation-suite-runs"] });
+    },
+  });
   const tone = suiteTone(sr.status);
   return (
     <Card className="p-5">
@@ -95,6 +126,13 @@ function Header({ sr }: { sr: SuiteRunView }) {
             <span>env <code className="font-mono">{sr.environment}</code></span>
             <span>created {new Date(sr.createdAt).toLocaleTimeString()}</span>
             {sr.durationMs != null && <span>· {(sr.durationMs / 1000).toFixed(1)}s</span>}
+          </div>
+          <div className="mt-2">
+            <TagEditor
+              tags={sr.tags ?? []}
+              suggestions={suggestions}
+              onChange={(next) => tagsMut.mutateAsync(next).then(() => undefined)}
+            />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3 text-right">

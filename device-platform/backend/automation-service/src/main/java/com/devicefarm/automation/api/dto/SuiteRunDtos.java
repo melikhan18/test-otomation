@@ -19,6 +19,9 @@ public class SuiteRunDtos {
             Boolean adaptiveWait
     ) {}
 
+    /** Replace the full tag set on a suite-run. Server normalises + caps to 16 tags. */
+    public record TagsRequest(List<String> tags) {}
+
     /** Lightweight row for the suite-runs list. */
     public record Summary(
             long id,
@@ -32,6 +35,7 @@ public class SuiteRunDtos {
             int passedScenarios,
             int failedScenarios,
             Integer durationMs,
+            List<String> tags,
             Instant createdAt,
             Instant startedAt,
             Instant finishedAt
@@ -54,6 +58,7 @@ public class SuiteRunDtos {
             int passedScenarios,
             int failedScenarios,
             String errorSummary,
+            List<String> tags,
             Instant createdAt,
             List<ChildRun> runs
     ) {}

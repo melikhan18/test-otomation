@@ -41,4 +41,11 @@ public class SuiteRunController {
         if (jwt == null) throw ApiException.unauthorized("missing Authorization header");
         return service.create(caller, req, jwt);
     }
+
+    @PatchMapping("/{id}/tags")
+    public SuiteRunDtos.View updateTags(@AuthenticationPrincipal JwtPrincipal caller,
+                                        @PathVariable long id,
+                                        @RequestBody SuiteRunDtos.TagsRequest req) {
+        return service.updateTags(caller, id, req.tags());
+    }
 }

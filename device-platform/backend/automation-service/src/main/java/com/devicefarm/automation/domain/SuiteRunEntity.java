@@ -1,6 +1,8 @@
 package com.devicefarm.automation.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -40,6 +42,11 @@ public class SuiteRunEntity {
     @Column(name = "error_summary", columnDefinition = "TEXT")
     private String errorSummary;
 
+    /** Free-form labels for filtering & grouping in the reports feed. */
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(columnDefinition = "TEXT[]", nullable = false)
+    private String[] tags = new String[0];
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -71,5 +78,6 @@ public class SuiteRunEntity {
     public int getPassedScenarios() { return passedScenarios; }   public void setPassedScenarios(int v) { this.passedScenarios = v; }
     public int getFailedScenarios() { return failedScenarios; }   public void setFailedScenarios(int v) { this.failedScenarios = v; }
     public String getErrorSummary() { return errorSummary; }      public void setErrorSummary(String v) { this.errorSummary = v; }
+    public String[] getTags() { return tags; }                    public void setTags(String[] v) { this.tags = v == null ? new String[0] : v; }
     public Instant getCreatedAt() { return createdAt; }
 }

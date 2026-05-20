@@ -21,6 +21,9 @@ public class RunDtos {
             Boolean adaptiveWait
     ) {}
 
+    /** Replace the full tag set on a report. Server normalises + caps to 16 tags. */
+    public record TagsRequest(List<String> tags) {}
+
     /** Lightweight row for the runs list. */
     public record Summary(
             long id,
@@ -34,6 +37,9 @@ public class RunDtos {
             int passedSteps,
             int failedSteps,
             Integer durationMs,
+            String videoUrl,
+            Long suiteRunId,
+            List<String> tags,
             Instant createdAt,
             Instant startedAt,
             Instant finishedAt
@@ -61,6 +67,7 @@ public class RunDtos {
             int interStepDelayMs,
             boolean adaptiveWait,
             String videoUrl,
+            List<String> tags,
             Instant createdAt,
             List<StepResultView> stepResults
     ) {}
