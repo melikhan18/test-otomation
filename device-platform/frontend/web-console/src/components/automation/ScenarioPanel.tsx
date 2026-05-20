@@ -9,13 +9,14 @@ import {
 } from "@dnd-kit/sortable";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import {
-  AlertTriangle, FileCheck2, FolderKanban, Link2, Pencil, Plus, Trash2,
+  AlertTriangle, FileCheck2, FolderKanban, History, Link2, Pencil, Play, Plus, Trash2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import RunDialog from "@/components/automation/RunDialog";
 import StepCard from "@/components/automation/StepCard";
 import StepEditor from "@/components/automation/StepEditor";
 import {
@@ -83,12 +84,14 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
   const [editingStepId, setEditingStepId] = useState<number | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [running, setRunning] = useState(false);
 
   useEffect(() => {
     setLocalSteps(null);
     setAdding(false);
     setEditingStepId(null);
     setEditingMeta(false);
+    setRunning(false);
   }, [scenarioId]);
 
   const sensors = useSensors(
@@ -158,7 +161,24 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Play size={12} />}
+                disabled={steps.length === 0}
+                onClick={() => setRunning(true)}
+                title={steps.length === 0 ? "Add steps before running" : "Run on a device"}
+              >
+                Run
+              </Button>
+              <button
+                onClick={() => nav(`/automation/runs?scenarioId=${scenarioId}`)}
+                className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-muted"
+                title="View runs for this scenario"
+              >
+                <History size={13} />
+              </button>
               <button onClick={() => setEditingMeta(true)} className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-muted" title="Edit scenario">
                 <Pencil size={13} />
               </button>
@@ -276,6 +296,14 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
           busy={remove.isPending}
           onCancel={() => setConfirmingDelete(false)}
           onConfirm={() => remove.mutate()}
+        />
+      )}
+
+      {running && (
+        <RunDialog
+          scenarioId={scenarioId}
+          scenarioName={scenario.name}
+          onClose={() => setRunning(false)}
         />
       )}
     </div>

@@ -10,13 +10,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import {
-  FileCheck2, FolderKanban, GripVertical, Pencil, Plus, Trash2,
+  FileCheck2, FolderKanban, GripVertical, Pencil, Play, Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import Combobox, { type ComboOption } from "@/components/automation/Combobox";
+import SuiteRunDialog from "@/components/automation/SuiteRunDialog";
 import {
   scenarioApi, suiteApi,
   type SuiteScenarioRef, type SuiteSummary, type SuiteUpdate, type SuiteView,
@@ -73,7 +74,8 @@ export default function SuitePanel({ suiteId, onSelectScenario, onAfterDelete, o
   });
 
   const [editingMeta, setEditingMeta] = useState(false);
-  useEffect(() => { setLocalOrder(null); setEditingMeta(false); }, [suiteId]);
+  const [running, setRunning] = useState(false);
+  useEffect(() => { setLocalOrder(null); setEditingMeta(false); setRunning(false); }, [suiteId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -128,7 +130,17 @@ export default function SuitePanel({ suiteId, onSelectScenario, onAfterDelete, o
               <span className="text-[10px] text-ink-muted font-mono">{items.length} scenarios · {totalSteps} steps</span>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Play size={12} />}
+              disabled={items.length === 0}
+              onClick={() => setRunning(true)}
+              title={items.length === 0 ? "Add at least one scenario first" : "Run suite on a device"}
+            >
+              Run suite
+            </Button>
             <button onClick={() => setEditingMeta(true)} className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-muted" title="Edit suite">
               <Pencil size={13} />
             </button>
@@ -192,6 +204,15 @@ export default function SuitePanel({ suiteId, onSelectScenario, onAfterDelete, o
           busy={update.isPending}
           onClose={() => setEditingMeta(false)}
           onSubmit={(b) => update.mutate(b, { onSuccess: () => setEditingMeta(false) })}
+        />
+      )}
+
+      {running && (
+        <SuiteRunDialog
+          suiteId={suite.id}
+          suiteName={suite.name}
+          scenarioCount={items.length}
+          onClose={() => setRunning(false)}
         />
       )}
     </div>

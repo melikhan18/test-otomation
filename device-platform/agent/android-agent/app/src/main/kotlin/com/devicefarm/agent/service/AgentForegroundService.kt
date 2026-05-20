@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.devicefarm.agent.BuildConfig
 import com.devicefarm.agent.R
 import com.devicefarm.agent.capture.ScreenCaptureEngine
+import com.devicefarm.agent.capture.ScreenshotEngine
 import com.devicefarm.agent.control.ControlExecutor
 import com.devicefarm.agent.inspect.InspectorEngine
 import com.devicefarm.agent.net.AgentSocket
@@ -148,6 +149,13 @@ class AgentForegroundService : Service() {
                 // captureEngine null check — engine onCreate'te init ediliyor ama henüz
                 // start(resultCode,data) çağrılmadıysa codec yok; no-op olur.
                 if (::captureEngine.isInitialized) captureEngine.requestKeyframe()
+            }
+            FrameType.SCREENSHOT_REQUEST -> {
+                val rid = runCatching { JSONObject(frame.payloadAsString()).optString("requestId", null) }.getOrNull()
+                // Result fires on the accessibility service's main executor; we just forward.
+                ScreenshotEngine.capture(rid) { payload ->
+                    agentSocket.send(Frame(FrameType.SCREENSHOT_RESPONSE, payload))
+                }
             }
             FrameType.HEARTBEAT -> {
                 agentSocket.send(Frame.empty(FrameType.HEARTBEAT))

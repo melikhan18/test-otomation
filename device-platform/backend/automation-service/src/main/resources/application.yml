@@ -30,6 +30,26 @@ app:
   jwt:
     secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
     issuer: device-platform
+  services:
+    session:
+      url: ${SVC_SESSION:http://localhost:8083}
+    bridge:
+      url:    ${SVC_BRIDGE:http://localhost:8084}
+  storage:
+    # In-cluster URL the service uses to PUT/GET (Docker network DNS or localhost).
+    endpoint:    ${MINIO_ENDPOINT:http://localhost:9000}
+    # URL stamped onto returned object links so the browser can open them.
+    public-url:  ${MINIO_PUBLIC_URL:http://localhost:9000}
+    access-key:  ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key:  ${MINIO_SECRET_KEY:minioadmin123}
+    region:      us-east-1
+    screenshots-bucket: screenshots
+    videos-bucket:      videos
+  retention:
+    enabled: ${RETENTION_ENABLED:true}
+    days:    ${RETENTION_DAYS:30}
+    # 6-field Spring cron — default 03:00 UTC daily.
+    cron:    ${RETENTION_CRON:0 0 3 * * *}
 
 management:
   endpoints:

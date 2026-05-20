@@ -6,11 +6,15 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * One per connected agent. Multiplexes traffic in two directions:
@@ -31,6 +35,10 @@ public class DeviceChannel {
     private final Sinks.Many<Frame> webToAgent;
     private final AtomicReference<Frame> lastStreamMetadata = new AtomicReference<>();
     private final AtomicReference<Frame> lastKeyframe = new AtomicReference<>();
+    /** Synchronous fan-out for components that must NOT compete with web subscribers for
+     *  multicast backpressure (e.g. the run video recorder). Each listener is called
+     *  inline from the agent's WebSocket inbound thread. */
+    private final List<Consumer<Frame>> rawListeners = new CopyOnWriteArrayList<>();
     private final Counter framesIn;
     private final Counter framesOut;
     private final Counter framesDropped;
@@ -63,6 +71,36 @@ public class DeviceChannel {
         } else {
             framesOut.increment();
         }
+        // Direct listeners — independent of multicast backpressure. A misbehaving
+        // listener must NOT cascade into other listeners or the web sink.
+        if (!rawListeners.isEmpty()) {
+            for (Consumer<Frame> l : rawListeners) {
+                try { l.accept(f); }
+                catch (Exception e) { log.warn("raw listener on device {} threw", deviceId, e); }
+            }
+        }
+    }
+
+    /**
+     * Subscribe a direct callback to every frame the agent emits — same delivery as the
+     * web sink but on a separate code path so screenshot/inspect surges can't strand it.
+     *
+     * Registration happens BEFORE the primer emits, so any frame published in the gap
+     * is delivered to the listener. The worst case is a duplicate keyframe (the primer
+     * may repeat the same SPS+PPS+IDR the listener just received live) — ffmpeg
+     * tolerates that fine; downstream consumers must, too.
+     */
+    public Disposable addRawListener(Consumer<Frame> listener) {
+        rawListeners.add(listener);
+        Frame meta = lastStreamMetadata.get();
+        if (meta != null) {
+            try { listener.accept(meta); } catch (Exception e) { log.warn("primer metadata threw", e); }
+        }
+        Frame kf = lastKeyframe.get();
+        if (kf != null) {
+            try { listener.accept(kf); } catch (Exception e) { log.warn("primer keyframe threw", e); }
+        }
+        return () -> rawListeners.remove(listener);
     }
 
     /** Subscribe a web client. Includes a primer of last metadata + last keyframe so late joiners can decode. */

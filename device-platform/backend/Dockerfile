@@ -19,6 +19,15 @@ FROM eclipse-temurin:21-jre
 ARG SERVICE
 ENV TZ=UTC
 WORKDIR /opt/app
+
+# Only the bridge needs ffmpeg (for H.264 → MP4 remux during run recordings).
+# Conditional install keeps the other service images ~80MB lighter.
+RUN if [ "$SERVICE" = "device-bridge-service" ]; then \
+        apt-get update && \
+        apt-get install -y --no-install-recommends ffmpeg && \
+        rm -rf /var/lib/apt/lists/* ; \
+    fi
+
 COPY --from=build /workspace/${SERVICE}/build/libs/*.jar /opt/app/app.jar
 EXPOSE 8080
 ENTRYPOINT ["java","-XX:+UseG1GC","-XX:MaxRAMPercentage=70.0","-jar","/opt/app/app.jar"]

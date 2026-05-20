@@ -302,6 +302,158 @@ export const workspaceApi = {
   tree: () => api.get<WorkspaceTree>("/api/automation/workspace/tree").then((r) => r.data),
 };
 
+/* ─────────────────────────────  Runs  ─────────────────────────────── */
+
+export type RunStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "ERROR" | "CANCELLED";
+export type StepResultStatus = "PENDING" | "RUNNING" | "PASSED" | "FAILED" | "SKIPPED" | "ERROR";
+
+export type RunSummary = {
+  id: number;
+  productId: number;
+  scenarioId: number | null;
+  scenarioName: string | null;
+  deviceId: number | null;
+  environment: string;
+  status: RunStatus;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  durationMs: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type StepResultView = {
+  id: number;
+  stepId: number | null;
+  orderIndex: number;
+  action: StepAction;
+  status: StepResultStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  errorMessage: string | null;
+  screenshotUrl: string | null;
+  resolvedLocator: string | null;
+  retriesUsed: number;
+};
+
+export type RunView = {
+  id: number;
+  productId: number;
+  scenarioId: number | null;
+  scenarioName: string | null;
+  scenarioVersion: number | null;
+  deviceId: number | null;
+  sessionId: number | null;
+  environment: string;
+  status: RunStatus;
+  triggerType: string;
+  triggeredByUserId: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  errorSummary: string | null;
+  interStepDelayMs: number;
+  adaptiveWait: boolean;
+  /** Public URL of the recorded MP4. Null if recording was skipped or failed. */
+  videoUrl: string | null;
+  createdAt: string;
+  stepResults: StepResultView[];
+};
+
+export type RunCreate = {
+  scenarioId: number;
+  deviceId: number;
+  environment?: string;
+  /** Sleep (ms) the orchestrator applies between every step; 0 = no pacing. */
+  interStepDelayMs?: number;
+  /** When true, poll inspect tree until stable (≤5s) instead of using a fixed delay. */
+  adaptiveWait?: boolean;
+};
+
+export const runApi = {
+  list:   (scenarioId?: number) =>
+    api.get<RunSummary[]>("/api/automation/runs", { params: scenarioId ? { scenarioId } : {} }).then((r) => r.data),
+  get:    (id: number) => api.get<RunView>(`/api/automation/runs/${id}`).then((r) => r.data),
+  create: (body: RunCreate) => api.post<RunView>("/api/automation/runs", body).then((r) => r.data),
+};
+
+/* ───────────────────────────  Suite runs  ──────────────────────────── */
+
+export type SuiteRunStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "ERROR" | "CANCELLED";
+
+export type SuiteRunSummary = {
+  id: number;
+  productId: number;
+  suiteId: number;
+  suiteName: string | null;
+  deviceId: number | null;
+  environment: string;
+  status: SuiteRunStatus;
+  totalScenarios: number;
+  passedScenarios: number;
+  failedScenarios: number;
+  durationMs: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type SuiteRunChild = {
+  id: number;
+  scenarioId: number | null;
+  scenarioName: string | null;
+  status: RunStatus;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  durationMs: number | null;
+  videoUrl: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type SuiteRunView = {
+  id: number;
+  productId: number;
+  suiteId: number;
+  suiteName: string | null;
+  deviceId: number | null;
+  environment: string;
+  status: SuiteRunStatus;
+  triggerType: string;
+  triggeredByUserId: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  totalScenarios: number;
+  passedScenarios: number;
+  failedScenarios: number;
+  errorSummary: string | null;
+  createdAt: string;
+  runs: SuiteRunChild[];
+};
+
+export type SuiteRunCreate = {
+  suiteId: number;
+  deviceId: number;
+  environment?: string;
+  interStepDelayMs?: number;
+  adaptiveWait?: boolean;
+};
+
+export const suiteRunApi = {
+  list:   (suiteId?: number) =>
+    api.get<SuiteRunSummary[]>("/api/automation/suite-runs", { params: suiteId ? { suiteId } : {} }).then((r) => r.data),
+  get:    (id: number) => api.get<SuiteRunView>(`/api/automation/suite-runs/${id}`).then((r) => r.data),
+  create: (body: SuiteRunCreate) => api.post<SuiteRunView>("/api/automation/suite-runs", body).then((r) => r.data),
+};
+
 export const suiteApi = {
   list:    () => api.get<SuiteSummary[]>("/api/automation/suites").then((r) => r.data),
   get:     (id: number) => api.get<SuiteView>(`/api/automation/suites/${id}`).then((r) => r.data),

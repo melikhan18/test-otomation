@@ -17,6 +17,12 @@ x-service-env: &service-env
   REDIS_PORT: 6379
   # Override JWT_SECRET in production. Must be base64 of at least 64 bytes.
   JWT_SECRET: Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=
+  # Object storage (MinIO). The endpoint is the in-network address services use to
+  # PUT/GET objects; the public URL is what the browser actually opens (host port).
+  MINIO_ENDPOINT:   http://minio:9000
+  MINIO_PUBLIC_URL: http://localhost:9000
+  MINIO_ACCESS_KEY: minioadmin
+  MINIO_SECRET_KEY: minioadmin123
 
 services:
   postgres:
@@ -46,6 +52,40 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER:     minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"   # S3 API (objects are served from here for the browser)
+      - "9001:9001"   # web console
+    volumes:
+      - dp_miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # One-shot init: creates the buckets we need with anonymous-download policy so the
+  # web console can render screenshots / video without S3 presigning gymnastics.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio: { condition: service_healthy }
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin123 &&
+      mc mb -p local/screenshots &&
+      mc mb -p local/videos &&
+      mc anonymous set download local/screenshots &&
+      mc anonymous set download local/videos &&
+      echo 'minio buckets ready'
+      "
+    restart: "no"
 
   auth-service:
     build:
@@ -109,8 +149,17 @@ services:
         SERVICE: automation-service
     environment:
       <<: *service-env
+      SVC_SESSION: http://session-service:8083
+      SVC_BRIDGE:  http://device-bridge-service:8084
+      # Retention policy — see RetentionService. Tweak per environment.
+      RETENTION_ENABLED: "true"
+      RETENTION_DAYS:    "30"
+      RETENTION_CRON:    "0 0 3 * * *"
     depends_on:
       postgres: { condition: service_healthy }
+      session-service: { condition: service_started }
+      device-bridge-service: { condition: service_started }
+      minio: { condition: service_healthy }
     ports:
       - "8085:8085"
 
@@ -138,3 +187,4 @@ services:
 
 volumes:
   dp_pgdata:
+  dp_miniodata:

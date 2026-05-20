@@ -6,6 +6,9 @@ import SessionPage from "@/pages/SessionPage";
 import ElementsPage from "@/pages/automation/ElementsPage";
 import DataPage from "@/pages/automation/DataPage";
 import WorkspacePage from "@/pages/automation/WorkspacePage";
+import RunsPage from "@/pages/automation/RunsPage";
+import RunDetailPage from "@/pages/automation/RunDetailPage";
+import SuiteRunDetailPage from "@/pages/automation/SuiteRunDetailPage";
 import AppLayout from "@/components/AppLayout";
 
 function RequireAuth() {
@@ -41,6 +44,9 @@ export const router = createBrowserRouter([
           { path: "/automation/workspace",      element: <WorkspacePage /> },
           { path: "/automation/elements",       element: <ElementsPage /> },
           { path: "/automation/data",           element: <DataPage /> },
+          { path: "/automation/runs",                   element: <RunsPage /> },
+          { path: "/automation/runs/:runId",            element: <RunDetailPage /> },
+          { path: "/automation/suite-runs/:suiteRunId", element: <SuiteRunDetailPage /> },
 
           // Legacy paths — redirect into the workspace with the right selection.
           { path: "/automation/scenarios",                element: <Navigate to="/automation/workspace" replace /> },
