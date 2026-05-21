@@ -19,29 +19,34 @@ export default {
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       colors: {
-        // Surface tokens (neutral, slightly cool)
+        // Surface + ink tokens are CSS variables so they swap with the theme.
+        // The triplet format ("11 13 18") lets Tailwind compose alpha as
+        // rgb(var(--tok) / <alpha-value>), so `bg-surface/40` etc. still work.
         surface: {
-          DEFAULT: "#0b0d12",   // app background
-          raised:  "#121419",   // cards
-          muted:   "#191c22",   // hover / muted areas
-          border:  "#23272f",
+          DEFAULT: "rgb(var(--surface-bg) / <alpha-value>)",
+          raised:  "rgb(var(--surface-raised) / <alpha-value>)",
+          muted:   "rgb(var(--surface-muted) / <alpha-value>)",
+          border:  "rgb(var(--surface-border) / <alpha-value>)",
         },
         ink: {
-          primary:   "#f4f5f7",
-          secondary: "#a4abb6",
-          muted:     "#6b727d",
+          primary:   "rgb(var(--ink-primary) / <alpha-value>)",
+          secondary: "rgb(var(--ink-secondary) / <alpha-value>)",
+          muted:     "rgb(var(--ink-muted) / <alpha-value>)",
         },
+        // Brand: 300/400 shift between themes so text accents stay readable on
+        // both light and dark surfaces. Solid fills (500/600) stay constant.
+        // See --brand-* tokens in index.css.
         brand: {
-          50:  "#eff5ff",
-          100: "#dbe7fe",
-          200: "#bcd2fd",
-          300: "#8db4fb",
-          400: "#5b8df7",
-          500: "#3b6ef0",  // primary
-          600: "#2c55da",
-          700: "#2643b1",
-          800: "#23398d",
-          900: "#1f3171",
+          50:  "rgb(var(--brand-50)  / <alpha-value>)",
+          100: "rgb(var(--brand-100) / <alpha-value>)",
+          200: "rgb(var(--brand-200) / <alpha-value>)",
+          300: "rgb(var(--brand-300) / <alpha-value>)",
+          400: "rgb(var(--brand-400) / <alpha-value>)",
+          500: "rgb(var(--brand-500) / <alpha-value>)",
+          600: "rgb(var(--brand-600) / <alpha-value>)",
+          700: "rgb(var(--brand-700) / <alpha-value>)",
+          800: "rgb(var(--brand-800) / <alpha-value>)",
+          900: "rgb(var(--brand-900) / <alpha-value>)",
         },
         success: { 500: "#22c55e", 600: "#16a34a" },
         warning: { 500: "#f59e0b", 600: "#d97706" },
@@ -53,16 +58,56 @@ export default {
         xl: "1rem",
       },
       boxShadow: {
-        card: "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 1px 2px 0 rgba(0,0,0,0.4)",
+        card:  "var(--shadow-card)",
         focus: "0 0 0 2px rgba(59,110,240,0.45)",
+        // Subtle elevated card (used by dialogs, dropdowns).
+        pop:   "var(--shadow-pop)",
       },
       keyframes: {
-        "fade-in": { "0%": { opacity: 0 }, "100%": { opacity: 1 } },
-        shimmer:   { "0%": { backgroundPosition: "-200% 0" }, "100%": { backgroundPosition: "200% 0" } },
+        "fade-in":    { "0%": { opacity: 0 }, "100%": { opacity: 1 } },
+        shimmer:      { "0%": { backgroundPosition: "-200% 0" }, "100%": { backgroundPosition: "200% 0" } },
+        // Status-indicator animations.
+        "pulse-soft": { "0%, 100%": { opacity: 1 }, "50%": { opacity: 0.55 } },
+        "wave-bar":   {
+          "0%, 100%": { transform: "scaleY(0.35)" },
+          "50%":      { transform: "scaleY(1)" },
+        },
+        "stripe-shift": {
+          "0%":   { backgroundPosition: "0 0" },
+          "100%": { backgroundPosition: "0 -200%" },
+        },
+        // Micro-interactions (modal / dropdown / toast entrances).
+        "scale-in": {
+          "0%":   { opacity: 0, transform: "scale(0.96)" },
+          "100%": { opacity: 1, transform: "scale(1)" },
+        },
+        "slide-up-fade": {
+          "0%":   { opacity: 0, transform: "translateY(8px)" },
+          "100%": { opacity: 1, transform: "translateY(0)" },
+        },
+        "slide-down-fade": {
+          "0%":   { opacity: 0, transform: "translateY(-8px)" },
+          "100%": { opacity: 1, transform: "translateY(0)" },
+        },
+        "skeleton-shimmer": {
+          "0%":   { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       animation: {
-        "fade-in": "fade-in 120ms ease-out",
-        shimmer: "shimmer 1.5s linear infinite",
+        "fade-in":         "fade-in 140ms ease-out",
+        shimmer:           "shimmer 1.5s linear infinite",
+        "pulse-soft":      "pulse-soft 1.6s ease-in-out infinite",
+        "wave-bar-1":      "wave-bar 1s ease-in-out infinite",
+        "wave-bar-2":      "wave-bar 1s ease-in-out infinite 0.15s",
+        "wave-bar-3":      "wave-bar 1s ease-in-out infinite 0.3s",
+        "stripe-shift":    "stripe-shift 2.4s linear infinite",
+        // Curves chosen to feel responsive but never sluggish — keep durations
+        // under ~200ms so the UI feels instant.
+        "scale-in":        "scale-in 160ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "slide-up-fade":   "slide-up-fade 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "slide-down-fade": "slide-down-fade 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        skeleton:          "skeleton-shimmer 1.6s linear infinite",
       },
     },
   },

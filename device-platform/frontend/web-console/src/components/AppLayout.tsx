@@ -22,9 +22,9 @@ export default function AppLayout() {
   // way the sidebar (and its TopBar inside the pane) stay fixed while long
   // pages can scroll freely on the right.
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="h-screen flex overflow-hidden bg-surface text-ink-primary">
       <Sidebar />
-      <div className="flex-1 min-w-0 flex flex-col overflow-y-auto">
+      <div className="flex-1 min-w-0 flex flex-col overflow-y-auto bg-surface text-ink-primary">
         {showGate ? <NoWorkspaceGate /> : <Outlet />}
       </div>
     </div>

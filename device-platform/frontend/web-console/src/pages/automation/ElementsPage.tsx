@@ -159,7 +159,7 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <Card className="px-5 py-4">
       <div className="label">{label}</div>
-      <div className="text-2xl font-semibold mt-1">{value}</div>
+      <div className="text-2xl font-semibold mt-1 text-ink-primary">{value}</div>
     </Card>
   );
 }

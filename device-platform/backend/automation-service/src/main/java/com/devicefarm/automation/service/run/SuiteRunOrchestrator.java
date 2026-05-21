@@ -48,16 +48,22 @@ public class SuiteRunOrchestrator {
     private final ScenarioRepository scenarios;
     private final RunRepository runs;
     private final RunOrchestrator runOrchestrator;
+    private final SuiteRunCancellationRegistry suiteCancels;
+    private final RunCancellationRegistry runCancels;
 
     public SuiteRunOrchestrator(SuiteRunRepository suiteRuns, SuiteRepository suites,
                                 SuiteScenarioRepository suiteScenarios, ScenarioRepository scenarios,
-                                RunRepository runs, RunOrchestrator runOrchestrator) {
+                                RunRepository runs, RunOrchestrator runOrchestrator,
+                                SuiteRunCancellationRegistry suiteCancels,
+                                RunCancellationRegistry runCancels) {
         this.suiteRuns = suiteRuns;
         this.suites = suites;
         this.suiteScenarios = suiteScenarios;
         this.scenarios = scenarios;
         this.runs = runs;
         this.runOrchestrator = runOrchestrator;
+        this.suiteCancels = suiteCancels;
+        this.runCancels = runCancels;
     }
 
     public void submit(long suiteRunId, String userJwt,
@@ -68,6 +74,7 @@ public class SuiteRunOrchestrator {
                 log.error("suite run {} crashed", suiteRunId, t);
                 markAborted(suiteRunId, "orchestrator crash: " + t.getMessage());
             }
+            finally { suiteCancels.clear(suiteRunId); }
         });
     }
 
@@ -88,7 +95,17 @@ public class SuiteRunOrchestrator {
         markRunning(sr, links.size());
 
         int passed = 0, failed = 0;
+        boolean cancelled = false;
         for (SuiteScenarioEntity link : links) {
+            // Cancel checkpoint before starting the next child. If the user pressed
+            // Stop while we were waiting for the previous child to terminate, we
+            // break here without launching the next one.
+            if (suiteCancels.isCancelled(suiteRunId)) {
+                cancelled = true;
+                log.info("suite run {} cancel requested — stopping before scenario {}", suiteRunId, link.getScenarioId());
+                break;
+            }
+
             ScenarioEntity scenario = scenarios.findById(link.getScenarioId()).orElse(null);
             if (scenario == null) {
                 // Scenario was deleted after suite was assembled. Skip but count as failed
@@ -100,17 +117,36 @@ public class SuiteRunOrchestrator {
             RunEntity childRun = createChildRun(sr, scenario, interStepDelayMs, adaptiveWait);
             runOrchestrator.submit(childRun.getId(), userJwt);
 
-            RunStatus terminal = waitForTerminal(childRun.getId());
+            RunStatus terminal = waitForTerminal(suiteRunId, childRun.getId());
             if (terminal == RunStatus.PASSED) passed++;
             else failed++;
+            if (terminal == RunStatus.CANCELLED) {
+                // Either the user cancelled the child directly, or we cascaded from a
+                // suite-level cancel. Either way the suite stops here.
+                cancelled = true;
+                break;
+            }
         }
 
-        finalize(suiteRunId, passed, failed);
+        if (cancelled) finalizeCancelled(suiteRunId, passed, failed);
+        else           finalize(suiteRunId, passed, failed);
     }
 
-    private RunStatus waitForTerminal(long runId) {
+    /**
+     * Waits for the child run to terminate, but also watches its parent's cancel
+     * flag — if the user clicks Stop on the suite while a child is mid-flight, we
+     * forward the cancel to the child orchestrator so it stops at its next safe
+     * checkpoint and uploads the partial recording. The child's CANCELLED status
+     * propagates back here and breaks the suite loop.
+     */
+    private RunStatus waitForTerminal(long suiteRunId, long runId) {
         long deadline = System.currentTimeMillis() + PER_RUN_TIMEOUT_MS;
+        boolean forwarded = false;
         while (System.currentTimeMillis() < deadline) {
+            if (!forwarded && suiteCancels.isCancelled(suiteRunId)) {
+                runCancels.requestCancel(runId);
+                forwarded = true;
+            }
             RunStatus s = runs.findById(runId).map(RunEntity::getStatus).orElse(null);
             if (s == null) return RunStatus.ERROR;
             if (s == RunStatus.PASSED || s == RunStatus.FAILED ||
@@ -165,6 +201,23 @@ public class SuiteRunOrchestrator {
             suiteRuns.save(sr);
             log.info("suite run {} finished: {} ({}p / {}f)", suiteRunId, sr.getStatus(), passed, failed);
         });
+    }
+
+    @Transactional
+    protected void finalizeCancelled(long suiteRunId, int passed, int failed) {
+        suiteRuns.findById(suiteRunId).ifPresent(sr -> {
+            Instant now = Instant.now();
+            sr.setFinishedAt(now);
+            if (sr.getStartedAt() != null) {
+                sr.setDurationMs((int) (now.toEpochMilli() - sr.getStartedAt().toEpochMilli()));
+            }
+            sr.setPassedScenarios(passed);
+            sr.setFailedScenarios(failed);
+            sr.setStatus(SuiteRunStatus.CANCELLED);
+            suiteRuns.save(sr);
+            log.info("suite run {} cancelled by user ({}p / {}f so far)", suiteRunId, passed, failed);
+        });
+        suiteCancels.clear(suiteRunId);
     }
 
     @Transactional

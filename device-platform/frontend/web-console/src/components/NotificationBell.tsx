@@ -121,7 +121,7 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute right-0 mt-1.5 w-[360px] max-h-[480px] z-30 rounded-md border border-surface-border bg-surface-raised shadow-xl flex flex-col">
           <div className="px-3 py-2 border-b border-surface-border flex items-center justify-between">
-            <div className="text-xs font-semibold">Notifications</div>
+            <div className="text-xs font-semibold text-ink-primary">Notifications</div>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => markAllRead.mutate()}

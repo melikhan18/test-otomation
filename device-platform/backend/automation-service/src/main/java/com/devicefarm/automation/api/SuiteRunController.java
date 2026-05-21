@@ -63,4 +63,13 @@ public class SuiteRunController {
             @RequestBody SuiteRunDtos.TagsRequest req) {
         return service.updateTags(caller, guard.requireProject(caller, projectId), id, req.tags());
     }
+
+    /** Stop a running/queued suite. Cascades a cancel to the current child run. */
+    @PostMapping("/{id}/cancel")
+    public SuiteRunDtos.View cancel(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id) {
+        return service.cancel(caller, guard.requireProject(caller, projectId), id);
+    }
 }

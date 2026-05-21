@@ -174,7 +174,16 @@ class AgentForegroundService : Service() {
                 })
                 // Bridge.receive() data-frame timeout'u (~25s) için, video akmasa bile aktif tut.
                 // OkHttp'nin WS ping/pong'u control frame; Reactor Netty bunu "message" saymaz.
-                if (s == AgentSocket.State.CONNECTED) startWsHeartbeat() else stopWsHeartbeat()
+                if (s == AgentSocket.State.CONNECTED) {
+                    startWsHeartbeat()
+                    // Re-prime the (possibly fresh) bridge channel: re-announce STREAM_METADATA
+                    // and force a keyframe. After a bridge restart its in-memory cache is empty,
+                    // so without this the web decoder is never configured and the live view stays
+                    // black — even though the encoder is still happily producing DELTAs.
+                    if (::captureEngine.isInitialized) captureEngine.reprimeForBridge()
+                } else {
+                    stopWsHeartbeat()
+                }
             }
         }
     }

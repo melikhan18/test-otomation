@@ -119,21 +119,54 @@ export default function SessionPage() {
   const [inspectSnapshot, setInspectSnapshot] = useState<string | null>(null);
   const pendingInspectId = useRef<string | null>(null);
 
+  // Control socket lifecycle. The bridge holds session state in-memory, so a bridge
+  // restart kills the WS and the once-only handle stays in `ws.readyState !== OPEN`
+  // forever — every subsequent tap/swipe/inspect drops silently. Reconnect with
+  // exponential backoff so the session survives backend restarts.
   useEffect(() => {
     if (!data?.sessionToken) return;
-    const handle = openControlSocket(data.id, data.sessionToken, {
-      onInspectResponse: (r) => {
-        if (pendingInspectId.current && r.requestId && r.requestId !== pendingInspectId.current) return;
-        setInspectBusy(false);
-        pendingInspectId.current = null;
-        if (r.error) { setInspectError(String(r.error)); setInspectTree(null); return; }
-        setInspectError(null);
-        setInspectTree(r.root as UiNode);
-        setInspectSelected(null);
-      },
-    });
-    controlRef.current = handle;
-    return () => { try { handle.socket.close(1000, "unmount"); } catch { /* ignore */ } controlRef.current = null; };
+    const sessionId = data.id;
+    const sessionToken = data.sessionToken;
+
+    let unmounted = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+
+    function connect() {
+      if (unmounted) return;
+      const handle = openControlSocket(sessionId, sessionToken, {
+        onOpen: () => { attempt = 0; },
+        onInspectResponse: (r) => {
+          if (pendingInspectId.current && r.requestId && r.requestId !== pendingInspectId.current) return;
+          setInspectBusy(false);
+          pendingInspectId.current = null;
+          if (r.error) { setInspectError(String(r.error)); setInspectTree(null); return; }
+          setInspectError(null);
+          setInspectTree(r.root as UiNode);
+          setInspectSelected(null);
+        },
+        onClose: (code) => {
+          if (unmounted) return;
+          controlRef.current = null;
+          // 4404 = agent offline at the bridge; back off a little longer.
+          // 4401 = unauthorized; don't retry (token changed / session ended).
+          if (code === 4401) return;
+          attempt++;
+          const delay = Math.min(1000 * Math.pow(2, Math.min(attempt, 5)), 15_000);
+          reconnectTimer = setTimeout(connect, delay);
+        },
+      });
+      controlRef.current = handle;
+    }
+
+    connect();
+    return () => {
+      unmounted = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      const h = controlRef.current;
+      controlRef.current = null;
+      try { h?.socket.close(1000, "unmount"); } catch { /* ignore */ }
+    };
   }, [data?.id, data?.sessionToken]);
 
   function runInspect() {

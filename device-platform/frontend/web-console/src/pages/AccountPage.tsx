@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Save, ShieldCheck, UserCircle2 } from "lucide-react";
+import { Save, UserCircle2 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
 import { FormRow, Section, SettingsLayout } from "@/components/settings/SettingsLayout";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { toast } from "@/components/toast/toastStore";
 
 /**
  * Self-service profile editor. Email is the important one — without it nobody
@@ -24,7 +25,6 @@ export default function AccountPage() {
   const [email, setEmail] = useState(currentEmail ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [okMsg, setOkMsg] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: () => authApi.updateProfile({
@@ -35,14 +35,14 @@ export default function AccountPage() {
     onSuccess: async () => {
       setCurrentPassword("");
       setNewPassword("");
-      setOkMsg("Saved");
-      setTimeout(() => setOkMsg(null), 2_000);
+      toast.success("Profile updated");
       await reload();
     },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.detail ?? e?.response?.data?.message ?? "Couldn't save profile";
+      toast.error(msg);
+    },
   });
-
-  const err = (save.error as any)?.response?.data?.detail
-            ?? (save.error as any)?.response?.data?.message;
 
   const emailDirty    = email.trim().toLowerCase() !== (currentEmail ?? "").toLowerCase();
   const passwordDirty = newPassword.length > 0;
@@ -83,24 +83,10 @@ export default function AccountPage() {
 
           <FormRow label="Current password"
                    hint="Required to save any change — re-auth check that prevents stolen-token hijacks.">
-            <div className="flex items-center gap-2">
-              <ShieldCheck size={13} className="text-ink-muted" />
-              <input type="password" value={currentPassword}
-                     onChange={(e) => setCurrentPassword(e.target.value)}
-                     className="input" />
-            </div>
+            <input type="password" value={currentPassword}
+                   onChange={(e) => setCurrentPassword(e.target.value)}
+                   className="input" />
           </FormRow>
-
-          {err && (
-            <div className="rounded-md border border-danger-500/30 bg-danger-500/10 text-danger-500 px-3 py-2 text-xs">
-              {String(err)}
-            </div>
-          )}
-          {okMsg && (
-            <div className="rounded-md border border-success-500/30 bg-success-500/10 text-success-500 px-3 py-2 text-xs">
-              {okMsg}
-            </div>
-          )}
 
           <div className="flex justify-end">
             <Button variant="primary" leftIcon={<Save size={12} />}

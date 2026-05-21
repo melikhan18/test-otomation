@@ -8,13 +8,15 @@ import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import NewCompanyDialog from "@/components/NewCompanyDialog";
 import { Section, SettingsLayout, FormRow } from "@/components/settings/SettingsLayout";
 import { companyApi, type CompanyView } from "@/lib/tenancy";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/cn";
+import { toast } from "@/components/toast/toastStore";
+import { confirm as confirmDialog } from "@/components/confirm/confirmStore";
 
 /**
  * /admin/companies — platform-wide tenant roster. Each row shows headline counts
@@ -68,11 +70,20 @@ export default function AdminCompaniesPage() {
 
   const archive = useMutation({
     mutationFn: (id: number) => companyApi.archive(id),
-    onSuccess: refresh,
+    onSuccess: (_data, id) => {
+      const name = all.find((c) => c.id === id)?.name ?? "Company";
+      toast.success(`${name} archived`);
+      refresh();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't archive company"),
   });
   const unarchive = useMutation({
     mutationFn: (id: number) => companyApi.unarchive(id),
-    onSuccess: refresh,
+    onSuccess: (data) => {
+      toast.success(`${data.name} restored`);
+      refresh();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't restore company"),
   });
 
   return (
@@ -124,7 +135,7 @@ export default function AdminCompaniesPage() {
           description={`${all.length} total · ${all.filter((c) => c.archivedAt == null).length} active · ${filtered.length} shown`}
         >
           {companiesQ.isLoading ? (
-            <div className="text-ink-muted text-xs flex items-center gap-2"><Spinner /> Loading…</div>
+            <SkeletonTable rows={5} />
           ) : all.length === 0 ? (
             <Card className="border-dashed">
               <EmptyState
@@ -168,8 +179,14 @@ export default function AdminCompaniesPage() {
                       busy={archive.isPending || unarchive.isPending}
                       onManage={() => manage(c)}
                       onRename={() => setRenaming(c)}
-                      onArchive={() => {
-                        if (confirm(`Archive ${c.name}? Members lose access until restored.`)) archive.mutate(c.id);
+                      onArchive={async () => {
+                        const ok = await confirmDialog({
+                          title: `Archive ${c.name}?`,
+                          description: "Members lose access until you restore the company. Data is preserved.",
+                          confirmLabel: "Archive",
+                          danger: true,
+                        });
+                        if (ok) archive.mutate(c.id);
                       }}
                       onUnarchive={() => unarchive.mutate(c.id)}
                     />

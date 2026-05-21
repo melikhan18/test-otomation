@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LiveIndicator } from "@/components/LiveIndicator";
 import ReportNav from "@/components/automation/ReportNav";
 import TagEditor from "@/components/automation/TagEditor";
 import {
@@ -16,6 +17,9 @@ import {
 } from "@/lib/automation";
 import { distinctTags, useReportFeed } from "@/lib/reports";
 import { useAuthStore } from "@/store/auth";
+import { sessionApi } from "@/lib/sessions";
+import DeviceVideoPlayer from "@/components/DeviceVideoPlayer";
+import { Radio } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export default function RunDetailPage() {
@@ -114,16 +118,101 @@ export default function RunDetailPage() {
 
       <div className="px-6 py-6 space-y-4">
         <RunHeader run={run} suggestions={suggestions} />
-        {run.videoUrl && <RunVideo url={run.videoUrl} />}
-        <StepTimeline run={run} />
+
+        {/* Two columns on lg+: steps on the left, live/recording media on the right.
+         *  On smaller widths the media stacks above the steps so phones/tablets get
+         *  the most informative panel first.                                        */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-7 order-2 lg:order-1">
+            <StepTimeline run={run} />
+          </div>
+          <div className="lg:col-span-5 order-1 lg:order-2">
+            <div className="lg:sticky lg:top-4">
+              <RunMedia run={run} />
+            </div>
+          </div>
+        </div>
       </div>
     </>
   );
 }
 
-/* ─────────────────────────────  Video  ─────────────────────────────── */
+/* ─────────────────────────────  Media (live / recording)  ─────────── */
 
-function RunVideo({ url }: { url: string }) {
+/**
+ * Right-hand panel that decides what to show based on the run's state:
+ *  - RUNNING / QUEUED → live, view-only stream from the device session
+ *  - Terminal + videoUrl → final recording (MP4, seekable)
+ *  - Terminal + no videoUrl → empty (rare: device crash, upload failed)
+ */
+function RunMedia({ run }: { run: RunView }) {
+  const isLive = run.status === "RUNNING" || run.status === "QUEUED";
+
+  if (isLive && run.sessionId != null) {
+    return <RunLiveView sessionId={run.sessionId} status={run.status} />;
+  }
+  if (run.videoUrl) {
+    return <RunRecording url={run.videoUrl} />;
+  }
+  // Nothing to show — keep the column visually quiet rather than render a noisy
+  // empty state next to the steps. Step rows already carry per-step screenshots
+  // for terminal runs without a full video.
+  return null;
+}
+
+/**
+ * View-only live preview while the run is in flight. We reuse {@link DeviceVideoPlayer}
+ * (the same canvas + H.264 decoder pipeline as SessionPage), but on its own — no touch
+ * forwarding, no control socket. The user just watches.
+ *
+ * SessionApi.get requires the caller to be the session owner (or platform admin), so
+ * teammates without ownership see a friendly fallback explaining that.
+ */
+function RunLiveView({ sessionId, status }: { sessionId: number; status: RunStatus }) {
+  const sessionQ = useQuery({
+    queryKey: ["session-for-run", sessionId],
+    queryFn: () => sessionApi.get(sessionId),
+    // Token TTL is short; refetch every 60s while we're live so a long run
+    // keeps the WebSocket reconnect-able if the token expires mid-stream.
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+
+  const token = sessionQ.data?.sessionToken ?? null;
+  const sessionEnded = sessionQ.data && sessionQ.data.status !== "ACTIVE";
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="px-4 py-2 border-b border-surface-border flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-ink-muted inline-flex items-center gap-2">
+          <Radio size={11} className="text-brand-400" />
+          Live · {status === "RUNNING" ? "running" : "waiting for device"}
+        </span>
+        <span className="text-[10px] text-ink-muted">view-only</span>
+      </div>
+      <div className="bg-black aspect-[9/16] max-h-[60vh] flex items-center justify-center">
+        {sessionQ.isError ? (
+          <div className="text-xs text-ink-muted px-4 py-6 text-center">
+            Live preview is only visible to the user who started the run.
+          </div>
+        ) : !token ? (
+          <div className="text-xs text-ink-muted">Connecting…</div>
+        ) : sessionEnded ? (
+          <div className="text-xs text-ink-muted">Session has ended — waiting for the recording.</div>
+        ) : (
+          <DeviceVideoPlayer
+            sessionId={sessionId}
+            sessionToken={token}
+            className="w-full h-full"
+          />
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function RunRecording({ url }: { url: string }) {
   return (
     <Card className="overflow-hidden">
       <div className="px-4 py-2 border-b border-surface-border flex items-center justify-between">
@@ -141,7 +230,7 @@ function RunVideo({ url }: { url: string }) {
         src={url}
         controls
         preload="metadata"
-        className="w-full max-h-[480px] bg-black object-contain"
+        className="w-full max-h-[60vh] bg-black object-contain"
       />
     </Card>
   );
@@ -167,6 +256,9 @@ function RunHeader({ run, suggestions }: { run: RunView; suggestions: string[] }
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider font-semibold text-ink-muted">
             Run #{run.id}
             <StatusBadge tone={tone}>{run.status}</StatusBadge>
+            {(run.status === "RUNNING" || run.status === "QUEUED") && (
+              <LiveIndicator variant="bars" tone={run.status === "RUNNING" ? "running" : "queued"} />
+            )}
           </div>
           <div className="text-lg font-semibold mt-1 truncate">
             {run.scenarioName ?? "(scenario deleted)"}{" "}

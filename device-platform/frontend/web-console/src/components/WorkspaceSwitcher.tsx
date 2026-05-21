@@ -38,7 +38,7 @@ export default function WorkspaceSwitcher() {
           <Plus size={13} className="text-brand-400" />
           <span className="flex-1 min-w-0">
             <span className="text-[10px] uppercase tracking-wider text-ink-muted block leading-tight">Workspace</span>
-            <span className="text-sm font-medium truncate block leading-tight">Create your first company</span>
+            <span className="text-sm font-medium truncate block leading-tight text-ink-primary">Create your first company</span>
           </span>
         </button>
         {newCompanyOpen && <NewCompanyDialog onClose={() => setNewCompanyOpen(false)} />}
@@ -172,7 +172,7 @@ function Picker({
         <span className="text-ink-muted">{icon}</span>
         <span className="flex-1 min-w-0">
           <span className="text-[10px] uppercase tracking-wider text-ink-muted block leading-tight">{label}</span>
-          <span className="text-sm font-medium truncate block leading-tight">{currentValue}</span>
+          <span className="text-sm font-medium truncate block leading-tight text-ink-primary">{currentValue}</span>
         </span>
         {!empty && <ChevronsUpDown size={12} className="text-ink-muted shrink-0" />}
       </button>

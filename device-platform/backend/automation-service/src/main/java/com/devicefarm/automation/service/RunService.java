@@ -22,13 +22,16 @@ public class RunService {
     private final StepResultRepository stepResults;
     private final ScenarioRepository scenarios;
     private final RunOrchestrator orchestrator;
+    private final com.devicefarm.automation.service.run.RunCancellationRegistry cancels;
 
     public RunService(RunRepository runs, StepResultRepository stepResults,
-                      ScenarioRepository scenarios, RunOrchestrator orchestrator) {
+                      ScenarioRepository scenarios, RunOrchestrator orchestrator,
+                      com.devicefarm.automation.service.run.RunCancellationRegistry cancels) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
         this.orchestrator = orchestrator;
+        this.cancels = cancels;
     }
 
     @Transactional
@@ -98,6 +101,32 @@ public class RunService {
         RunEntity run = ensureInProject(ctx, id);
         run.setTags(Tags.normalize(tags));
         runs.save(run);
+        ScenarioEntity sc = run.getScenarioId() != null
+                ? scenarios.findById(run.getScenarioId()).orElse(null) : null;
+        return toView(run, sc);
+    }
+
+    /**
+     * Signal a running/queued run to stop at its next safe checkpoint. We don't
+     * abort the orchestrator's thread or kill the device session here — that
+     * would leave the recording without a graceful close. Instead we flip the
+     * in-memory cancel flag and let the worker see it between steps; the finally
+     * block still uploads the partial MP4 and stamps {@code CANCELLED}.
+     *
+     * Idempotent: cancelling an already-terminal run is a no-op (and not an
+     * error — the UI may double-click the stop button).
+     */
+    @Transactional(readOnly = true)
+    public RunDtos.View cancel(JwtPrincipal caller, ProjectContext ctx, long id) {
+        RunEntity run = ensureInProject(ctx, id);
+        RunStatus s = run.getStatus();
+        if (s != RunStatus.QUEUED && s != RunStatus.RUNNING) {
+            // Already done — return the current view so the client just re-renders.
+            ScenarioEntity sc = run.getScenarioId() != null
+                    ? scenarios.findById(run.getScenarioId()).orElse(null) : null;
+            return toView(run, sc);
+        }
+        cancels.requestCancel(id);
         ScenarioEntity sc = run.getScenarioId() != null
                 ? scenarios.findById(run.getScenarioId()).orElse(null) : null;
         return toView(run, sc);

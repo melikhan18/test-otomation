@@ -39,8 +39,12 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center font-medium rounded-md border transition-colors",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center font-medium rounded-md border",
+        // Smooth color + subtle press feedback. Scale stays GPU-cheap.
+        "transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-out",
+        "active:scale-[0.97] motion-reduce:active:scale-100",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40",
+        "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
         variants[variant],
         sizes[size],
         className,

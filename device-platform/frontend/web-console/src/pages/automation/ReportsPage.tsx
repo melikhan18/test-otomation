@@ -3,8 +3,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertOctagon, CheckCircle2, ChevronRight, Clock, Film, Hourglass, Layers,
-  PauseCircle, RefreshCcw, Tag as TagIcon, XCircle,
+  PauseCircle, RefreshCcw, Square, Tag as TagIcon, XCircle,
 } from "lucide-react";
+import { toast } from "@/components/toast/toastStore";
+import { confirm as confirmDialog } from "@/components/confirm/confirmStore";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -12,6 +14,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import TagEditor from "@/components/automation/TagEditor";
+import { LiveIndicator } from "@/components/LiveIndicator";
 import {
   runApi, suiteRunApi,
   type RunStatus, type RunSummary, type SuiteRunStatus, type SuiteRunSummary,
@@ -170,8 +173,20 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
       qc.invalidateQueries({ queryKey: ["automation-suite-run-detail", sr.id] });
     },
   });
+  const cancelMut = useMutation({
+    mutationFn: () => suiteRunApi.cancel(sr.id),
+    onSuccess: () => {
+      toast.success(`Stop requested for suite #${sr.id}`, {
+        description: "Partial recording will be preserved.",
+      });
+      qc.invalidateQueries({ queryKey: ["automation-suite-runs"] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't stop the suite"),
+  });
 
   const tone = suiteTone(sr.status);
+  const isLive = sr.status === "RUNNING" || sr.status === "QUEUED";
+  const liveTone = sr.status === "RUNNING" ? "running" : "queued";
   const total = sr.totalScenarios || 0;
   const passPct = total > 0 ? (sr.passedScenarios / total) * 100 : 0;
   const failPct = total > 0 ? (sr.failedScenarios / total) * 100 : 0;
@@ -183,7 +198,8 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
         "block rounded-md border border-surface-border bg-surface hover:border-brand-500/30 hover:bg-surface-muted/40 transition-colors",
         sr.status === "FAILED" || sr.status === "ERROR" ? "border-l-2 border-l-danger-500" : "",
         sr.status === "PASSED"  ? "border-l-2 border-l-success-500" : "",
-        sr.status === "RUNNING" ? "border-l-2 border-l-brand-500" : "",
+        sr.status === "RUNNING" ? "border-l-2 border-l-brand-500  bg-brand-500/[0.03]" : "",
+        sr.status === "QUEUED"  ? "border-l-2 border-l-warning-500 bg-warning-500/[0.03]" : "",
       )}
     >
       <div className="px-4 py-3 flex items-center gap-4 flex-wrap">
@@ -230,7 +246,16 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
               </div>
             )}
           </div>
+          {isLive && <LiveIndicator variant="bars" tone={liveTone} />}
           <StatusBadge tone={tone}>{sr.status}</StatusBadge>
+          {isLive && (
+            <StopButton
+              busy={cancelMut.isPending}
+              label={`Stop suite #${sr.id}?`}
+              description="The current scenario will stop at its next safe checkpoint. Partial recording is preserved."
+              onConfirm={() => cancelMut.mutate()}
+            />
+          )}
           <ChevronRight size={14} className="text-ink-muted" />
         </div>
       </div>
@@ -247,9 +272,21 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
       qc.invalidateQueries({ queryKey: ["automation-run", run.id] });
     },
   });
+  const cancelMut = useMutation({
+    mutationFn: () => runApi.cancel(run.id),
+    onSuccess: () => {
+      toast.success(`Stop requested for run #${run.id}`, {
+        description: "Partial recording will be preserved.",
+      });
+      qc.invalidateQueries({ queryKey: ["automation-runs"] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't stop the run"),
+  });
 
   const tone = runTone(run.status);
   const Icon = runIcon(run.status);
+  const isLive = run.status === "RUNNING" || run.status === "QUEUED";
+  const liveTone = run.status === "RUNNING" ? "running" : "queued";
   const total = run.totalSteps || 0;
   const passPct = total > 0 ? (run.passedSteps / total) * 100 : 0;
   const failPct = total > 0 ? (run.failedSteps / total) * 100 : 0;
@@ -260,7 +297,8 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
         "block rounded-md border border-surface-border bg-surface hover:border-brand-500/30 hover:bg-surface-muted/40 transition-colors",
         run.status === "FAILED" || run.status === "ERROR" ? "border-l-2 border-l-danger-500" : "",
         run.status === "PASSED"  ? "border-l-2 border-l-success-500" : "",
-        run.status === "RUNNING" ? "border-l-2 border-l-brand-500" : "",
+        run.status === "RUNNING" ? "border-l-2 border-l-brand-500  bg-brand-500/[0.03]" : "",
+        run.status === "QUEUED"  ? "border-l-2 border-l-warning-500 bg-warning-500/[0.03]" : "",
       )}
     >
       <div className="px-4 py-3 flex items-center gap-4 flex-wrap">
@@ -309,11 +347,52 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
               </div>
             )}
           </div>
+          {isLive && <LiveIndicator variant="bars" tone={liveTone} />}
           <StatusBadge tone={tone}>{run.status}</StatusBadge>
+          {isLive && (
+            <StopButton
+              busy={cancelMut.isPending}
+              label={`Stop run #${run.id}?`}
+              description="The current step will stop at the next safe checkpoint. Partial recording is preserved."
+              onConfirm={() => cancelMut.mutate()}
+            />
+          )}
           <ChevronRight size={14} className="text-ink-muted" />
         </div>
       </div>
     </Link>
+  );
+}
+
+/* ─────────────────────────  Stop button  ─────────────────────────── */
+
+function StopButton({
+  label, description, busy, onConfirm,
+}: { label: string; description: string; busy: boolean; onConfirm: () => void }) {
+  // The whole row is a <Link> — we have to stop both navigation and propagation
+  // so clicking Stop never opens the detail page.
+  async function handle(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ok = await confirmDialog({
+      title: label,
+      description,
+      confirmLabel: "Stop",
+      cancelLabel: "Keep running",
+      danger: true,
+    });
+    if (ok) onConfirm();
+  }
+  return (
+    <button
+      onClick={handle}
+      disabled={busy}
+      title="Stop this run"
+      className="inline-flex items-center gap-1 h-7 px-2 rounded border border-danger-500/30 bg-danger-500/10 text-danger-500 hover:bg-danger-500/20 text-[10px] uppercase tracking-wider font-semibold transition-colors disabled:opacity-50"
+    >
+      <Square size={10} fill="currentColor" />
+      Stop
+    </button>
   );
 }
 
@@ -333,6 +412,8 @@ function runTone(s: RunStatus): "success" | "warning" | "danger" | "info" | "neu
   if (s === "QUEUED")  return "warning";
   return "neutral";
 }
+/* ─────────────────────────  status helpers  ─────────────────── */
+
 function runIcon(s: RunStatus) {
   switch (s) {
     case "PASSED":    return CheckCircle2;

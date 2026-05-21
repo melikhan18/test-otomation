@@ -50,7 +50,14 @@ public class VideoRecorder {
     private int framesWritten = 0;
     private int keyframesSeen = 0;
     private int deltasSeen = 0;
-    private int fps = DEFAULT_FPS;
+    private int targetFps = DEFAULT_FPS;
+    /**
+     * Wall-clock anchor — captured on the first frame we *actually write* (not on
+     * subscription start). Used together with {@link #lastFrameNanos} to compute
+     * the effective FPS so dropped frames don't fast-forward playback.
+     */
+    private long firstFrameNanos = 0;
+    private long lastFrameNanos  = 0;
     /**
      * H.264 demands the bytestream start with SPS+PPS+IDR. If we accept delta frames
      * before the first keyframe, ffmpeg sees "non-existing PPS 0 referenced" and bails
@@ -89,7 +96,7 @@ public class VideoRecorder {
                 try {
                     JsonNode node = M.readTree(f.payloadAsString());
                     int newFps = node.path("fps").asInt(0);
-                    if (newFps > 0 && newFps <= 120) fps = newFps;
+                    if (newFps > 0 && newFps <= 120) targetFps = newFps;
                 } catch (Exception ignored) { /* leave default */ }
                 return;
             }
@@ -110,6 +117,12 @@ public class VideoRecorder {
             ByteBuffer dup = f.payload().duplicate();
             while (dup.hasRemaining()) out.write(dup);
             framesWritten++;
+            // Wall-clock stamps drive the actual-FPS computation in finishAndRemux.
+            // We use the time the frame was *written*, not received, because that's the
+            // moment from the player's perspective on every other end of the pipeline.
+            long now = System.nanoTime();
+            if (firstFrameNanos == 0) firstFrameNanos = now;
+            lastFrameNanos = now;
         } catch (IOException e) {
             log.error("recording {} write failed", sessionId, e);
             // Don't dispose here — let finishAndRemux do the cleanup, we just stop ingesting.
@@ -133,14 +146,20 @@ public class VideoRecorder {
             return null;
         }
 
-        log.info("recording {} stream stats: keyframesSeen={} deltasSeen={} written={} fps={}",
-                sessionId, keyframesSeen, deltasSeen, framesWritten, fps);
+        // Effective FPS = frames we wrote divided by the wall-clock span between the
+        // first and last write. This corrects for encoder/network drops that would
+        // otherwise compress the video into a sped-up clip:
+        //   target=30fps, actual=20fps → without this fix, 30s of action becomes a
+        //   20s playback running at ~1.5×. Computing actual FPS keeps duration honest.
+        double playbackFps = computePlaybackFps();
+        log.info("recording {} stream stats: keyframesSeen={} deltasSeen={} written={} targetFps={} playbackFps={}",
+                sessionId, keyframesSeen, deltasSeen, framesWritten, targetFps, String.format("%.2f", playbackFps));
 
         try {
-            runFfmpeg();
+            runFfmpeg(playbackFps);
             byte[] mp4 = Files.readAllBytes(tempMp4);
-            log.info("recording {} remuxed: frames={} mp4bytes={} fps={}",
-                    sessionId, framesWritten, mp4.length, fps);
+            log.info("recording {} remuxed: frames={} mp4bytes={} playbackFps={}",
+                    sessionId, framesWritten, mp4.length, String.format("%.2f", playbackFps));
             return mp4;
         } catch (Exception e) {
             log.warn("ffmpeg failed for session {}: {}", sessionId, e.toString());
@@ -151,20 +170,47 @@ public class VideoRecorder {
     }
 
     /**
+     * Effective playback FPS based on the wall-clock duration of the actual write
+     * stream. Falls back to {@link #targetFps} (from STREAM_METADATA) when we have
+     * fewer than 2 frames or the span is implausibly short — those edge cases
+     * can't produce a meaningful rate.
+     */
+    private double computePlaybackFps() {
+        if (framesWritten < 2 || lastFrameNanos <= firstFrameNanos) {
+            return targetFps;
+        }
+        double seconds = (lastFrameNanos - firstFrameNanos) / 1_000_000_000.0;
+        if (seconds < 0.25) return targetFps;
+        // framesWritten counts both the first and last frame, so dividing by the
+        // interval rather than (frames - 1) slightly under-estimates FPS; we keep
+        // it that way because over-estimating shortens playback (the very bug we
+        // are fixing).
+        double measured = framesWritten / seconds;
+        // Clamp to sane bounds — extreme values usually point to clock skew or
+        // a single-frame burst. 0.5 protects against accidental still-image runs.
+        if (measured < 0.5)  return 0.5;
+        if (measured > 120)  return 120;
+        return measured;
+    }
+
+    /**
      * {@code -f h264} tells ffmpeg the input is a raw Annex-B byte-stream (no container),
      * {@code -r <fps>} fixes the playback rate (raw H.264 has no timestamps), and
      * {@code -c copy} remuxes without re-encoding — fast & lossless.
      * {@code +faststart} moves the moov atom to the front so the browser can start
      * playback before the whole MP4 is downloaded.
+     *
+     * Note: we pass the *measured* FPS (not the agent's target), so dropped frames
+     * stretch playback to match real time instead of fast-forwarding.
      */
-    private void runFfmpeg() throws IOException, InterruptedException {
+    private void runFfmpeg(double playbackFps) throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(
                 "ffmpeg",
                 "-y",
                 "-hide_banner",
                 "-loglevel", "warning",
                 "-f", "h264",
-                "-r", String.valueOf(fps),
+                "-r", String.format(java.util.Locale.ROOT, "%.3f", playbackFps),
                 "-i", tempH264.toString(),
                 "-c", "copy",
                 "-movflags", "+faststart",

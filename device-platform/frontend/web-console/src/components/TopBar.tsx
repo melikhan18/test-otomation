@@ -13,7 +13,7 @@ export default function TopBar({
   const computed = crumbs ?? inferCrumbs(loc.pathname);
 
   return (
-    <header className="h-16 px-6 border-b border-surface-border bg-surface-raised/30 backdrop-blur flex items-center justify-between gap-4 sticky top-0 z-10">
+    <header className="h-16 px-6 border-b border-surface-border bg-surface-raised/95 supports-[backdrop-filter]:bg-surface-raised/80 backdrop-blur flex items-center justify-between gap-4 sticky top-0 z-10">
       <div className="flex items-center gap-1 text-sm">
         <Link to="/" className="lg:hidden flex items-center gap-2 mr-3">
           <div className="h-7 w-7 rounded-md bg-brand-500/10 border border-brand-500/30 flex items-center justify-center">

@@ -26,9 +26,16 @@ const DeviceVideoPlayer = forwardRef<DeviceVideoPlayerHandle, Props>(function De
   useImperativeHandle(ref, () => ({
     captureSnapshot: () => {
       const c = canvasRef.current;
-      if (!c || c.width === 0) return null;
+      if (!c) { console.warn("[DeviceVideoPlayer] captureSnapshot: canvas ref is null"); return null; }
+      if (c.width === 0) { console.warn("[DeviceVideoPlayer] captureSnapshot: canvas.width=0 (no metadata yet?)"); return null; }
       try { return c.toDataURL("image/png"); }
-      catch { return null; }
+      catch (e) {
+        // Most likely SecurityError: WebCodecs VideoFrame draw can leave the canvas
+        // origin-tainted on some Chromium/GPU combos. Surface so we can switch to the
+        // agent-side ScreenshotEngine fallback if it keeps happening.
+        console.warn("[DeviceVideoPlayer] captureSnapshot: toDataURL threw", e);
+        return null;
+      }
     },
   }), []);
 

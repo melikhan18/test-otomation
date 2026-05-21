@@ -52,6 +52,22 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!--
+            Cihaz yeniden başladığında, daha önce enroll edilmiş agent'ı heartbeat-only
+            modunda otomatik ayağa kaldırır. MediaProjection consent process-bound
+            olduğu için ekran yayını kullanıcı uygulamayı açana kadar duraklar; ama
+            cihaz web konsolunda online görünür.
+        -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

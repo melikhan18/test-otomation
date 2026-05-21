@@ -4,12 +4,83 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────  Theme tokens  ─────────────────────────
+ * Tailwind config references these as rgb(var(--tok) / <alpha-value>), so
+ * `bg-surface/30` etc. keep working with theme-swapped colors.
+ *
+ * Light is the default (:root); .dark is layered on <html> by ThemeProvider
+ * based on the user's stored preference (or prefers-color-scheme in "system").
+ */
 @layer base {
+  :root {
+    /* Light — neutral cool gray, white cards. surface-muted is pulled a touch
+     * darker than the page background so half-opacity hover states (which
+     * many components use) still register against bg-surface. ink-secondary +
+     * ink-muted are tuned to clear WCAG AA on bg-surface-raised (white). */
+    --surface-bg:     247 248 250;   /* page background */
+    --surface-raised: 255 255 255;   /* cards, dropdowns */
+    --surface-muted:  226 230 236;   /* hover bands, table headers, sticky tints */
+    --surface-border: 217 222 229;
+    --ink-primary:     17  20  26;
+    --ink-secondary:   55  64  78;   /* main body copy second-level */
+    --ink-muted:       93 102 116;   /* hints / helper text — still AA-compliant */
+    --shadow-card:    0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+    --shadow-pop:     0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.06);
+    /* Brand: light shifts the *text* shades darker (better contrast on white)
+     * but keeps fills (500/600) intact. The 50/100/200 backgrounds also stay
+     * the same — they read as soft tints on a white surface. */
+    --brand-50:  239 245 255;
+    --brand-100: 219 231 254;
+    --brand-200: 188 210 253;
+    --brand-300:  38  67 177;   /* shift toward 700 for readable text on light */
+    --brand-400:  44  85 218;   /* shift toward 600 */
+    --brand-500:  59 110 240;
+    --brand-600:  44  85 218;
+    --brand-700:  38  67 177;
+    --brand-800:  35  57 141;
+    --brand-900:  31  49 113;
+  }
+
+  html.dark {
+    /* Dark — slightly cool near-black */
+    --surface-bg:      11  13  18;
+    --surface-raised:  18  20  25;
+    --surface-muted:   25  28  34;
+    --surface-border:  35  39  47;
+    --ink-primary:    244 245 247;
+    --ink-secondary:  164 171 182;
+    --ink-muted:      107 114 125;
+    --shadow-card:    0 1px 0 0 rgba(255,255,255,0.03) inset, 0 1px 2px 0 rgba(0,0,0,0.4);
+    --shadow-pop:     0 12px 28px rgba(0,0,0,0.55), 0 4px 10px rgba(0,0,0,0.35);
+    /* Brand: dark uses the lighter shades for text accents, since they need
+     * to read on a near-black background. */
+    --brand-50:  239 245 255;
+    --brand-100: 219 231 254;
+    --brand-200: 188 210 253;
+    --brand-300: 141 180 251;
+    --brand-400:  91 141 247;
+    --brand-500:  59 110 240;
+    --brand-600:  44  85 218;
+    --brand-700:  38  67 177;
+    --brand-800:  35  57 141;
+    --brand-900:  31  49 113;
+  }
+
   html, body, #root { height: 100%; }
   body {
-    @apply bg-surface text-ink-primary font-sans antialiased;
+    @apply font-sans antialiased;
+    /* Direct CSS instead of @apply for these two so the theme tokens win even
+     * when descendant text utilities don't explicitly opt in. Light/dark swap
+     * via :root vs html.dark above. */
+    background-color: rgb(var(--surface-bg));
+    color: rgb(var(--ink-primary));
     font-feature-settings: "cv02","cv03","cv04","ss01";
+    transition: background-color 200ms ease, color 200ms ease;
   }
+  /* Native form controls follow the theme so date/select widgets match. */
+  :root { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
@@ -27,12 +98,23 @@
 
 @layer components {
   .card {
-    @apply rounded-xl border border-surface-border bg-surface-raised shadow-card;
+    @apply rounded-xl border border-surface-border bg-surface-raised shadow-card
+           transition-shadow duration-200;
+  }
+  /* Opt-in card lift: <Card className="card-hover"> for grid rows where a
+   * subtle hover affordance helps. Skipped on `.card`'s base so static panels
+   * (settings sections, info cards) don't bounce. */
+  .card-hover {
+    @apply transition-all duration-200 ease-out;
+  }
+  .card-hover:hover {
+    @apply -translate-y-0.5 shadow-pop;
   }
   .input {
     @apply w-full rounded-md bg-surface border border-surface-border px-3 py-2 text-sm
            text-ink-primary placeholder:text-ink-muted outline-none
-           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 transition-colors;
+           focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30
+           transition-[border-color,box-shadow,background-color] duration-150 ease-out;
   }
   .label {
     @apply text-[11px] font-medium uppercase tracking-[0.08em] text-ink-muted;
@@ -40,5 +122,38 @@
   .kbd {
     @apply px-1.5 py-0.5 rounded border border-surface-border bg-surface text-[10px]
            font-mono text-ink-secondary;
+  }
+  /* Skeleton placeholder — neutral pill that shimmers across light/dark. The
+   * gradient stops use raised + muted so the shimmer is visible on both. */
+  .skeleton {
+    @apply rounded-md;
+    background-image: linear-gradient(
+      90deg,
+      rgb(var(--surface-muted) / 0.6) 0%,
+      rgb(var(--surface-muted) / 1) 50%,
+      rgb(var(--surface-muted) / 0.6) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.6s linear infinite;
+  }
+}
+
+/* Scale-in entrance for any Card directly inside a modal backdrop. The
+ * backdrop itself keeps its `animate-fade-in` (defined per-element), this
+ * rule layers a soft scale on top of the card without touching 18 call sites. */
+[class*="fixed"][class*="inset-0"][class*="z-50"][class*="bg-black"] > [class*="rounded-xl"][class*="bg-surface-raised"] {
+  animation: scale-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Accessibility — honour user's OS-level "reduce motion" preference. Status
+ * indicators (audio-wave, stripe-shift) and decorative entrances all stop. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

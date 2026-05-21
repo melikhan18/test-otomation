@@ -7,13 +7,14 @@ import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Spinner } from "@/components/ui/Spinner";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import DeviceAccessDialog from "@/components/DeviceAccessDialog";
 import { Section, SettingsLayout } from "@/components/settings/SettingsLayout";
 import { adminDeviceApi, deviceApi, type AdminDevice } from "@/lib/devices";
 import { companyApi, type CompanyView } from "@/lib/tenancy";
 import { cn } from "@/lib/cn";
+import { toast } from "@/components/toast/toastStore";
 
 /**
  * /admin/devices — platform-wide device roster for vendor / platform admins.
@@ -70,7 +71,11 @@ export default function AdminDevicesPage() {
         projectIds: !d.restricted ? current.projectIds : [],
       });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-devices"] }),
+    onSuccess: (_data, d) => {
+      qc.invalidateQueries({ queryKey: ["admin-devices"] });
+      toast.success(d.restricted ? "Device opened to all projects" : "Device restricted");
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't update access"),
   });
 
   function refresh() {
@@ -129,7 +134,7 @@ export default function AdminDevicesPage() {
           description={`${devicesQ.data?.length ?? 0} total · ${filtered.length} shown`}
         >
           {devicesQ.isLoading ? (
-            <div className="text-ink-muted text-xs flex items-center gap-2"><Spinner /> Loading…</div>
+            <SkeletonTable rows={5} />
           ) : (devicesQ.data ?? []).length === 0 ? (
             <Card className="border-dashed">
               <EmptyState
@@ -212,7 +217,14 @@ function ReassignDialog({
   const [companyId, setCompanyId] = useState<number | null>(null);
   const reassign = useMutation({
     mutationFn: () => adminDeviceApi.reassign(device.id, companyId!),
-    onSuccess: onSaved,
+    onSuccess: () => {
+      const target = companies.find((c) => c.id === companyId);
+      toast.success("Device reassigned", {
+        description: target ? `Moved to ${target.name}.` : undefined,
+      });
+      onSaved();
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't reassign device"),
   });
   const err = (reassign.error as any)?.response?.data?.detail
            ?? (reassign.error as any)?.response?.data?.message;

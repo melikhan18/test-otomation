@@ -48,9 +48,11 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-full grid lg:grid-cols-2 bg-surface">
-      <div className="hidden lg:flex flex-col justify-between p-12 border-r border-surface-border bg-gradient-to-br from-surface via-surface to-brand-900/10 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-30" style={{
-          backgroundImage: "radial-gradient(circle at 25% 30%, rgba(59,110,240,0.18), transparent 40%), radial-gradient(circle at 80% 70%, rgba(59,110,240,0.10), transparent 50%)",
+      <div className="hidden lg:flex flex-col justify-between p-12 border-r border-surface-border bg-surface relative overflow-hidden">
+        <div className="absolute inset-0 opacity-60 dark:opacity-50" style={{
+          backgroundImage:
+            "radial-gradient(circle at 25% 30%, rgb(var(--brand-500) / 0.18), transparent 45%), " +
+            "radial-gradient(circle at 80% 75%, rgb(var(--brand-500) / 0.10), transparent 50%)",
         }} />
         <div className="relative flex items-center gap-3">
           <div className="h-10 w-10 rounded-lg bg-brand-500/10 border border-brand-500/30 flex items-center justify-center">

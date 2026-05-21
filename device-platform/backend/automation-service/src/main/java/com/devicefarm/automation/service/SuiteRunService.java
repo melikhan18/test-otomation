@@ -24,16 +24,19 @@ public class SuiteRunService {
     private final ScenarioRepository scenarios;
     private final RunRepository runs;
     private final SuiteRunOrchestrator orchestrator;
+    private final com.devicefarm.automation.service.run.SuiteRunCancellationRegistry cancels;
 
     public SuiteRunService(SuiteRunRepository suiteRuns, SuiteRepository suites,
                            SuiteScenarioRepository suiteScenarios, ScenarioRepository scenarios,
-                           RunRepository runs, SuiteRunOrchestrator orchestrator) {
+                           RunRepository runs, SuiteRunOrchestrator orchestrator,
+                           com.devicefarm.automation.service.run.SuiteRunCancellationRegistry cancels) {
         this.suiteRuns = suiteRuns;
         this.suites = suites;
         this.suiteScenarios = suiteScenarios;
         this.scenarios = scenarios;
         this.runs = runs;
         this.orchestrator = orchestrator;
+        this.cancels = cancels;
     }
 
     @Transactional
@@ -84,6 +87,23 @@ public class SuiteRunService {
         SuiteRunEntity sr = ensureInProject(ctx, id);
         sr.setTags(Tags.normalize(tags));
         suiteRuns.save(sr);
+        return toView(sr);
+    }
+
+    /**
+     * Signal a queued/running suite to stop. Cooperative: the orchestrator picks
+     * the flag up between child runs and forwards a cancel to the child that's
+     * currently in flight, so its partial recording still uploads.
+     * Idempotent — calling on a terminal suite is a no-op.
+     */
+    @Transactional(readOnly = true)
+    public SuiteRunDtos.View cancel(JwtPrincipal caller, ProjectContext ctx, long id) {
+        SuiteRunEntity sr = ensureInProject(ctx, id);
+        SuiteRunStatus s = sr.getStatus();
+        if (s != SuiteRunStatus.QUEUED && s != SuiteRunStatus.RUNNING) {
+            return toView(sr);
+        }
+        cancels.requestCancel(id);
         return toView(sr);
     }
 

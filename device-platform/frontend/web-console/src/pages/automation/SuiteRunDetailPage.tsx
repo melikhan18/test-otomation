@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { LiveIndicator } from "@/components/LiveIndicator";
 import ReportNav from "@/components/automation/ReportNav";
 import TagEditor from "@/components/automation/TagEditor";
 import {
@@ -135,6 +136,9 @@ function Header({ sr, suggestions }: { sr: SuiteRunView; suggestions: string[] }
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider font-semibold text-ink-muted">
             Suite run #{sr.id}
             <StatusBadge tone={tone}>{sr.status}</StatusBadge>
+            {(sr.status === "RUNNING" || sr.status === "QUEUED") && (
+              <LiveIndicator variant="bars" tone={sr.status === "RUNNING" ? "running" : "queued"} />
+            )}
           </div>
           <div className="text-lg font-semibold mt-1 truncate">
             {sr.suiteName ?? "(suite deleted)"}
@@ -207,6 +211,8 @@ function ChildList({ sr }: { sr: SuiteRunView }) {
 function ChildRow({ i, r }: { i: number; r: SuiteRunChild }) {
   const Icon = runStatusIcon(r.status);
   const color = runStatusColor(r.status);
+  const isLive = r.status === "RUNNING" || r.status === "QUEUED";
+  const liveTone = r.status === "RUNNING" ? "running" : "queued";
   return (
     <Link
       to={`/automation/runs/${r.id}`}
@@ -214,7 +220,8 @@ function ChildRow({ i, r }: { i: number; r: SuiteRunChild }) {
         "rounded-md border border-surface-border bg-surface flex items-stretch hover:border-brand-500/30 transition-colors",
         r.status === "FAILED" || r.status === "ERROR" ? "border-l-2 border-l-danger-500" : "",
         r.status === "PASSED"  ? "border-l-2 border-l-success-500" : "",
-        r.status === "RUNNING" ? "border-l-2 border-l-brand-500" : "",
+        r.status === "RUNNING" ? "border-l-2 border-l-brand-500  bg-brand-500/[0.03]" : "",
+        r.status === "QUEUED"  ? "border-l-2 border-l-warning-500 bg-warning-500/[0.03]" : "",
       )}
     >
       <div className="px-3 flex items-center justify-center text-[11px] font-mono text-ink-muted border-r border-surface-border w-10 shrink-0">
@@ -238,6 +245,11 @@ function ChildRow({ i, r }: { i: number; r: SuiteRunChild }) {
           )}
         </div>
       </div>
+      {isLive && (
+        <div className="px-3 flex items-center">
+          <LiveIndicator variant="bars" tone={liveTone} />
+        </div>
+      )}
       <div className="px-3 flex items-center text-ink-muted">
         <ChevronRight size={14} />
       </div>

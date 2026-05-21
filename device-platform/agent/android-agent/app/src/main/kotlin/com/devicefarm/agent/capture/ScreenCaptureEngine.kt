@@ -39,8 +39,21 @@ class ScreenCaptureEngine(
         val realWidth: Int,
         val realHeight: Int,
         val densityDpi: Int = DisplayMetrics.DENSITY_DEFAULT,
-        val fps: Int = 60,
-        val bitrate: Int = 4_000_000,
+        /**
+         * Target frame rate. 30fps is the sweet spot for screen mirroring:
+         *   - encoder + on-device GPU keep up reliably (60fps caused drops on
+         *     mid-range phones, which surfaced as stutter + lower quality);
+         *   - halves the bit budget so each frame gets ~2× more bits, sharper
+         *     output;
+         *   - aligns with typical Android UI animation tick (~16ms frame).
+         */
+        val fps: Int = 30,
+        /**
+         * Bitrate budget. 8 Mbps at 720p@30 ≈ 0.30 bits/pixel — comfortably in
+         * the "broadcast quality" band. Was 4 Mbps which was visibly soft on
+         * text-heavy screens. Bump again only if the link saturates.
+         */
+        val bitrate: Int = 8_000_000,
         /** H.264 level. AVCLevel4 supports 60fps at our resolutions; bump if you push higher. */
         val avcLevel: Int = MediaCodecInfo.CodecProfileLevel.AVCLevel4,
         /**
@@ -82,7 +95,16 @@ class ScreenCaptureEngine(
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
             setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
             setInteger(MediaFormat.KEY_LEVEL, cfg.avcLevel)
-            setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+            // VBR lets the encoder allocate more bits to complex frames (lots of
+            // motion, fine text) and fewer to static screens — visibly sharper for
+            // the same average bandwidth. Falls back to CBR on encoders that don't
+            // declare VBR support.
+            val bitrateMode = if (encoderSupportsVbr()) {
+                MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR
+            } else {
+                MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR
+            }
+            setInteger(MediaFormat.KEY_BITRATE_MODE, bitrateMode)
 
             // Low-latency hints
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setInteger(MediaFormat.KEY_LATENCY, 0)
@@ -131,6 +153,22 @@ class ScreenCaptureEngine(
         codec?.setParameters(Bundle().apply {
             putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
         })
+    }
+
+    /**
+     * Re-prime a freshly-connected bridge channel. After a bridge restart the new DeviceChannel
+     * has no cached STREAM_METADATA or keyframe in its primer, so a web subscriber's decoder is
+     * never configured (no `decoder.configure(...)` call without metadata) and the video stays
+     * black even though the agent is happily sending DELTAs. We re-announce the stream descriptor
+     * and force the encoder to emit a new I-frame so the next subscription can decode from scratch.
+     *
+     * Cheap and idempotent: metadata is ~150 bytes; requestKeyframe just sets a codec parameter.
+     * No-op if capture isn't running (consent not granted yet).
+     */
+    fun reprimeForBridge() {
+        if (!running) return
+        announceMetadata()
+        requestKeyframe()
     }
 
     private fun announceMetadata() {
@@ -184,6 +222,25 @@ class ScreenCaptureEngine(
         val out = ByteArray(remaining())
         duplicate().get(out)
         return out
+    }
+
+    /**
+     * Probes whether the default H.264 encoder advertises VBR support. The check
+     * has to happen against an encoder that's already created — we use a throwaway
+     * lookup before configure() to avoid a second `createEncoderByType` allocation.
+     */
+    private fun encoderSupportsVbr(): Boolean {
+        return try {
+            val list = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+            list.codecInfos.asSequence()
+                .filter { it.isEncoder }
+                .flatMap { info -> info.supportedTypes.asSequence().map { type -> info to type } }
+                .firstOrNull { (_, t) -> t.equals("video/avc", ignoreCase = true) }
+                ?.let { (info, type) ->
+                    val caps = info.getCapabilitiesForType(type).encoderCapabilities
+                    caps.isBitrateModeSupported(MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                } ?: false
+        } catch (_: Throwable) { false }
     }
 
     companion object {

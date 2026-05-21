@@ -389,6 +389,9 @@ export const runApi = {
   create: (body: RunCreate) => api.post<RunView>("/api/automation/runs", body).then((r) => r.data),
   updateTags: (id: number, tags: string[]) =>
     api.patch<RunView>(`/api/automation/runs/${id}/tags`, { tags }).then((r) => r.data),
+  /** Signal a queued/running run to stop at its next safe checkpoint. Partial recording is preserved. */
+  cancel: (id: number) =>
+    api.post<RunView>(`/api/automation/runs/${id}/cancel`).then((r) => r.data),
 };
 
 /* ───────────────────────────  Suite runs  ──────────────────────────── */
@@ -464,6 +467,9 @@ export const suiteRunApi = {
   create: (body: SuiteRunCreate) => api.post<SuiteRunView>("/api/automation/suite-runs", body).then((r) => r.data),
   updateTags: (id: number, tags: string[]) =>
     api.patch<SuiteRunView>(`/api/automation/suite-runs/${id}/tags`, { tags }).then((r) => r.data),
+  /** Stop a running/queued suite. Cascades to whichever child run is currently in flight. */
+  cancel: (id: number) =>
+    api.post<SuiteRunView>(`/api/automation/suite-runs/${id}/cancel`).then((r) => r.data),
 };
 
 export const suiteApi = {

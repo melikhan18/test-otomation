@@ -48,6 +48,7 @@ public class RunOrchestrator {
     private final SessionClient sessions;
     private final BridgeClient bridge;
     private final ObjectStorage storage;
+    private final RunCancellationRegistry cancels;
     private final com.devicefarm.automation.tenancy.ProjectLookup projectLookup;
 
     public RunOrchestrator(RunRepository runs, StepResultRepository stepResults,
@@ -55,6 +56,7 @@ public class RunOrchestrator {
                            ElementRepository elements, TestDataRepository testData,
                            SessionClient sessions, BridgeClient bridge,
                            ObjectStorage storage,
+                           RunCancellationRegistry cancels,
                            com.devicefarm.automation.tenancy.ProjectLookup projectLookup) {
         this.runs = runs;
         this.stepResults = stepResults;
@@ -66,6 +68,7 @@ public class RunOrchestrator {
         this.sessions = sessions;
         this.bridge = bridge;
         this.storage = storage;
+        this.cancels = cancels;
     }
 
     public void submit(long runId, String userJwt) {
@@ -110,6 +113,7 @@ public class RunOrchestrator {
                 run.getEnvironment());
 
         boolean anyFailure = false;
+        boolean cancelled = false;
         int interStepDelay = Math.max(0, run.getInterStepDelayMs());
         boolean adaptive = run.isAdaptiveWait();
 
@@ -123,6 +127,16 @@ public class RunOrchestrator {
 
             List<StepResultEntity> placeholders = stepResults.findAllByRunIdOrderByOrderIndexAsc(runId);
             for (int i = 0; i < plan.size(); i++) {
+                // Cooperative cancel checkpoint — before kicking off the step. If the
+                // user pressed Stop while we were sleeping between steps (or running
+                // the previous step) we exit the loop cleanly here. The finally block
+                // still uploads the partial recording and marks the run CANCELLED.
+                if (cancels.isCancelled(runId)) {
+                    cancelled = true;
+                    log.info("run {} cancel requested — stopping at step {}", runId, i);
+                    break;
+                }
+
                 StepEntity step = plan.get(i);
                 StepResultEntity row = placeholders.get(i);
 
@@ -162,10 +176,11 @@ public class RunOrchestrator {
                 // Skipped after the last step since there's nothing to wait for.
                 if (i < plan.size() - 1) {
                     if (adaptive && changesUi(step.getAction())) {
-                        waitForStable(reservation.sessionId(), reservation.sessionToken());
+                        if (waitForStable(reservation.sessionId(), reservation.sessionToken(), runId)) {
+                            cancelled = true; break;
+                        }
                     } else if (!adaptive && interStepDelay > 0) {
-                        try { Thread.sleep(interStepDelay); }
-                        catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+                        if (sleepCancellable(interStepDelay, runId)) { cancelled = true; break; }
                     }
                 }
             }
@@ -176,9 +191,13 @@ public class RunOrchestrator {
             // VIDEO_TAIL_MS pause so the screen's final state lands in the MP4.
             captureAndAttachVideo(reservation.sessionId(), reservation.sessionToken(), runId);
             sessions.release(reservation.sessionId(), userJwt);
+            // Free the cancel-flag slot — even if no cancel was requested, removing
+            // a non-existent key is a no-op.
+            cancels.clear(runId);
         }
 
-        finalize(run, anyFailure);
+        if (cancelled) finalizeCancelled(run);
+        else           finalize(run, anyFailure);
     }
 
     /** Trailing seconds captured after the last step so the final UI state (success toast,
@@ -258,6 +277,41 @@ public class RunOrchestrator {
         log.info("run {} finished: {} ({}p / {}f)", run.getId(), fresh.getStatus(), passed, failed);
     }
 
+    /**
+     * Terminal state when the user pressed Stop. Same shape as {@link #finalize}
+     * but stamps {@link RunStatus#CANCELLED} and marks any PENDING/RUNNING step
+     * results as SKIPPED so the report doesn't show ghost-running rows.
+     */
+    @Transactional
+    protected void finalizeCancelled(RunEntity run) {
+        Instant now = Instant.now();
+        RunEntity fresh = runs.findById(run.getId()).orElse(run);
+        fresh.setFinishedAt(now);
+        if (fresh.getStartedAt() != null) {
+            fresh.setDurationMs((int) (now.toEpochMilli() - fresh.getStartedAt().toEpochMilli()));
+        }
+
+        var results = stepResults.findAllByRunIdOrderByOrderIndexAsc(run.getId());
+        int passed = 0, failed = 0;
+        for (var r : results) {
+            switch (r.getStatus()) {
+                case PASSED -> passed++;
+                case FAILED, ERROR -> failed++;
+                case PENDING, RUNNING -> {
+                    r.setStatus(StepResultStatus.SKIPPED);
+                    stepResults.save(r);
+                }
+                default -> { /* SKIPPED already — leave it */ }
+            }
+        }
+        fresh.setPassedSteps(passed);
+        fresh.setFailedSteps(failed);
+        fresh.setStatus(RunStatus.CANCELLED);
+        runs.save(fresh);
+        log.info("run {} cancelled by user ({}p / {}f / {} steps total)",
+                run.getId(), passed, failed, results.size());
+    }
+
     @Transactional
     protected void fail(long runId, String message) {
         runs.findById(runId).ifPresent(run -> {
@@ -304,17 +358,37 @@ public class RunOrchestrator {
     }
 
     /**
+     * Cancellation-aware sleep. Slices the wait into small chunks and bails out
+     * as soon as the user's stop request arrives. Returns true when cancelled
+     * (caller should break the loop), false on a clean elapsed wait.
+     */
+    private boolean sleepCancellable(long totalMs, long runId) {
+        final long sliceMs = 100;
+        long remaining = totalMs;
+        while (remaining > 0) {
+            if (cancels.isCancelled(runId)) return true;
+            long chunk = Math.min(sliceMs, remaining);
+            try { Thread.sleep(chunk); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); return true; }
+            remaining -= chunk;
+        }
+        return false;
+    }
+
+    /**
      * Polls the accessibility tree until two consecutive snapshots are identical (= "settled").
      * Bails out at {@link #ADAPTIVE_MAX_WAIT_MS}. On any inspect failure we just keep polling
      * — the next step's own resolve will surface a real error if the device is truly dead.
+     *
+     * Returns true if the wait was interrupted by a cancel request (so the caller breaks).
      */
-    private void waitForStable(long sessionId, String sessionToken) {
-        try { Thread.sleep(ADAPTIVE_INITIAL_DELAY_MS); }
-        catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
+    private boolean waitForStable(long sessionId, String sessionToken, long runId) {
+        if (sleepCancellable(ADAPTIVE_INITIAL_DELAY_MS, runId)) return true;
 
         long deadline = System.currentTimeMillis() + ADAPTIVE_MAX_WAIT_MS;
         String prev = null;
         while (System.currentTimeMillis() < deadline) {
+            if (cancels.isCancelled(runId)) return true;
             String sig;
             try {
                 JsonNode tree = bridge.inspect(sessionId, sessionToken, 2);
@@ -323,12 +397,12 @@ public class RunOrchestrator {
                 log.debug("adaptive wait inspect failed: {}", e.toString());
                 sig = null;
             }
-            if (sig != null && sig.equals(prev)) return; // two matching samples — settled
+            if (sig != null && sig.equals(prev)) return false; // two matching samples — settled
             prev = sig;
-            try { Thread.sleep(ADAPTIVE_POLL_INTERVAL_MS); }
-            catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
+            if (sleepCancellable(ADAPTIVE_POLL_INTERVAL_MS, runId)) return true;
         }
         log.debug("adaptive wait hit cap ({}ms) on session {}", ADAPTIVE_MAX_WAIT_MS, sessionId);
+        return false;
     }
 
     /** Stable string representation of the tree shape — ignores bounds/focus/scroll noise. */

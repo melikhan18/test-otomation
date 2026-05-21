@@ -63,4 +63,13 @@ public class RunController {
             @RequestBody RunDtos.TagsRequest req) {
         return service.updateTags(caller, guard.requireProject(caller, projectId), id, req.tags());
     }
+
+    /** Stop a running/queued run. Partial recording is preserved. */
+    @PostMapping("/{id}/cancel")
+    public RunDtos.View cancel(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id) {
+        return service.cancel(caller, guard.requireProject(caller, projectId), id);
+    }
 }
