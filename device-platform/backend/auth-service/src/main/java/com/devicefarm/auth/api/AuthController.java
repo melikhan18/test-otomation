@@ -21,6 +21,11 @@ public class AuthController {
         return auth.login(req.username(), req.password());
     }
 
+    @PostMapping("/signup")
+    public AuthDtos.LoginResponse signup(@RequestBody @Valid AuthDtos.SignupRequest req) {
+        return auth.signup(req);
+    }
+
     @PostMapping("/refresh")
     public AuthDtos.LoginResponse refresh(@RequestBody @Valid AuthDtos.RefreshRequest req) {
         return auth.refresh(req.refreshToken());
@@ -29,7 +34,16 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<AuthDtos.CurrentUserResponse> me(@AuthenticationPrincipal JwtPrincipal principal) {
         if (principal == null || principal.userId() == null) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(new AuthDtos.CurrentUserResponse(
-                principal.userId(), principal.subject(), principal.role(), principal.productId()));
+        return ResponseEntity.ok(auth.currentUser(principal.userId()));
+    }
+
+    /** Self-service profile update — email + password. */
+    @PatchMapping("/me")
+    public AuthDtos.CurrentUserResponse updateMe(@AuthenticationPrincipal JwtPrincipal principal,
+                                                  @RequestBody @Valid AuthDtos.ProfileUpdate req) {
+        if (principal == null || principal.userId() == null) {
+            throw com.devicefarm.common.error.ApiException.unauthorized("missing identity");
+        }
+        return auth.updateProfile(principal.userId(), req);
     }
 }

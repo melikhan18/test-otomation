@@ -48,18 +48,21 @@ public class RunOrchestrator {
     private final SessionClient sessions;
     private final BridgeClient bridge;
     private final ObjectStorage storage;
+    private final com.devicefarm.automation.tenancy.ProjectLookup projectLookup;
 
     public RunOrchestrator(RunRepository runs, StepResultRepository stepResults,
                            ScenarioRepository scenarios, StepRepository steps,
                            ElementRepository elements, TestDataRepository testData,
                            SessionClient sessions, BridgeClient bridge,
-                           ObjectStorage storage) {
+                           ObjectStorage storage,
+                           com.devicefarm.automation.tenancy.ProjectLookup projectLookup) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
         this.steps = steps;
         this.elements = elements;
         this.testData = testData;
+        this.projectLookup = projectLookup;
         this.sessions = sessions;
         this.bridge = bridge;
         this.storage = storage;
@@ -89,7 +92,12 @@ public class RunOrchestrator {
 
         SessionClient.Reservation reservation;
         try {
-            reservation = sessions.reserve(run.getDeviceId(), userJwt);
+            // Forward the run's tenancy context to session-service so it can validate
+            // device-vs-project access before locking. ProjectLookup gives us companyId
+            // without holding a JPA reference to auth's schema.
+            Long companyId = projectLookup.find(run.getProjectId())
+                    .map(com.devicefarm.automation.tenancy.ProjectLookup.Info::companyId).orElse(null);
+            reservation = sessions.reserve(run.getDeviceId(), userJwt, companyId, run.getProjectId());
         } catch (Exception e) {
             log.warn("run {} reservation failed: {}", runId, e.toString());
             fail(runId, "could not reserve device: " + e.getMessage());

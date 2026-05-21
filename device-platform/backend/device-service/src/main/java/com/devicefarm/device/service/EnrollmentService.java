@@ -38,12 +38,25 @@ public class EnrollmentService {
         this.wsUrl = wsUrl;
     }
 
+    /**
+     * Mint an enrollment token against the caller's active company. Header
+     * {@code X-Company-Id} carries the target company; the JWT must show the
+     * caller is OWNER/QA_MANAGER (or platform admin) there.
+     */
     @Transactional
-    public DeviceDtos.EnrollmentTokenView issueEnrollmentToken(JwtPrincipal admin) {
-        if (admin == null || !admin.isAdmin()) throw ApiException.forbidden("admin only");
+    public DeviceDtos.EnrollmentTokenView issueEnrollmentToken(JwtPrincipal admin, Long companyId) {
+        if (admin == null || admin.userId() == null) throw ApiException.unauthorized("missing identity");
+        if (companyId == null) throw ApiException.badRequest("missing X-Company-Id header");
+        // Enrollment provisions a device into the company as a whole, so it's an
+        // OWNER-level operation. QA_MANAGERs are project-scoped now and don't get
+        // to bring new devices into the org on their own.
+        if (!admin.isOwnerOf(companyId)) {
+            throw ApiException.forbidden("OWNER role required");
+        }
         String token = generateOpaqueToken();
         Instant expiresAt = Instant.now().plus(jwtProps.getEnrollmentTokenTtl());
-        EnrollmentToken et = tokens.save(new EnrollmentToken(token, admin.productId(), admin.userId(), expiresAt));
+        EnrollmentToken et = tokens.save(new EnrollmentToken(
+                token, admin.productId(), companyId, admin.userId(), expiresAt));
         return new DeviceDtos.EnrollmentTokenView(et.getToken(), et.getExpiresAt());
     }
 
@@ -54,10 +67,15 @@ public class EnrollmentService {
         if (et.getUsedAt() != null) throw ApiException.unauthorized("enrollment token already used");
         if (et.getExpiresAt().isBefore(Instant.now())) throw ApiException.unauthorized("enrollment token expired");
 
-        Device device = devices.findByProductIdAndSerial(et.getProductId(), req.serial())
-                .map(existing -> existing)  // re-enroll same serial → reuse
+        // Prefer company-scoped lookup; falls back to legacy productId for tokens
+        // minted before V2 backfill made the column non-null.
+        Long companyId = et.getCompanyId();
+        Device device = (companyId != null
+                ? devices.findByCompanyIdAndSerial(companyId, req.serial())
+                : devices.findByProductIdAndSerial(et.getProductId(), req.serial()))
+                .map(existing -> existing)
                 .orElseGet(() -> devices.save(new Device(
-                        et.getProductId(), req.serial(), req.manufacturer(), req.model(),
+                        et.getProductId(), companyId, req.serial(), req.manufacturer(), req.model(),
                         req.androidVersion(), req.screenWidth(), req.screenHeight(), req.agentVersion())));
 
         device.touchLastSeen();

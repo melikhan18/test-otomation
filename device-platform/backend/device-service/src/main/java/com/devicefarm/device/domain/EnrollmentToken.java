@@ -17,6 +17,9 @@ public class EnrollmentToken {
     @Column(name = "product_id", nullable = false)
     private Long productId;
 
+    @Column(name = "company_id")
+    private Long companyId;
+
     @Column(name = "issued_by_user_id", nullable = false)
     private Long issuedByUserId;
 
@@ -33,9 +36,10 @@ public class EnrollmentToken {
     private Instant createdAt = Instant.now();
 
     protected EnrollmentToken() {}
-    public EnrollmentToken(String token, Long productId, Long issuedByUserId, Instant expiresAt) {
+    public EnrollmentToken(String token, Long productId, Long companyId, Long issuedByUserId, Instant expiresAt) {
         this.token = token;
         this.productId = productId;
+        this.companyId = companyId;
         this.issuedByUserId = issuedByUserId;
         this.expiresAt = expiresAt;
     }
@@ -43,6 +47,7 @@ public class EnrollmentToken {
     public Long getId() { return id; }
     public String getToken() { return token; }
     public Long getProductId() { return productId; }
+    public Long getCompanyId() { return companyId; }
     public Long getIssuedByUserId() { return issuedByUserId; }
     public Instant getExpiresAt() { return expiresAt; }
     public Instant getUsedAt() { return usedAt; }

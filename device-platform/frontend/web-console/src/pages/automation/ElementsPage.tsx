@@ -11,9 +11,11 @@ import ElementEditor from "@/components/automation/ElementEditor";
 import {
   elementApi, type ElementCreate, type ElementUpdate, type ElementView,
 } from "@/lib/automation";
+import { useAuthStore } from "@/store/auth";
 
 export default function ElementsPage() {
   const qc = useQueryClient();
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<ElementView | null>(null);
   const [creating, setCreating] = useState(false);
@@ -21,9 +23,10 @@ export default function ElementsPage() {
   const [confirmDelete, setConfirmDelete] = useState<ElementView | null>(null);
 
   const elementsQ = useQuery({
-    queryKey: ["automation-elements", search],
+    queryKey: ["automation-elements", activeCompanyId ?? null, search],
     queryFn: () => elementApi.list(search || undefined),
     refetchOnWindowFocus: false,
+    enabled: activeCompanyId != null,
   });
 
   const create = useMutation({

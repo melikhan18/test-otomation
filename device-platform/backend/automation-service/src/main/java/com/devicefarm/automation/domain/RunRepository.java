@@ -7,7 +7,8 @@ import java.util.List;
 
 public interface RunRepository extends JpaRepository<RunEntity, Long> {
     List<RunEntity> findTop200ByProductIdOrderByCreatedAtDesc(Long productId);
-    List<RunEntity> findTop50ByProductIdAndScenarioIdOrderByCreatedAtDesc(Long productId, Long scenarioId);
+    List<RunEntity> findTop200ByProjectIdOrderByCreatedAtDesc(Long projectId);
+    List<RunEntity> findTop50ByProjectIdAndScenarioIdOrderByCreatedAtDesc(Long projectId, Long scenarioId);
     List<RunEntity> findAllBySuiteRunIdOrderByCreatedAtAsc(Long suiteRunId);
     /** Retention scan — small enough lists at typical retention windows. */
     List<RunEntity> findAllByCreatedAtBefore(Instant cutoff);

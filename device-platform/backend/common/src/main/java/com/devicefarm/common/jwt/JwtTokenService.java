@@ -9,8 +9,11 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -44,6 +47,49 @@ public class JwtTokenService {
                 "userId", userId,
                 "productId", productId
         ));
+    }
+
+    /**
+     * Full multi-tenancy access token. The {@code companies} list is encoded as
+     * an array of small maps so the JWT stays parseable by every service via
+     * {@link Claims#get(String, Class)} without bespoke deserialisers.
+     */
+    public String issueUserAccessToken(long userId, String role, long productId,
+                                       boolean platformAdmin,
+                                       List<JwtPrincipal.CompanyMembership> companies) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", role);
+        claims.put("userId", userId);
+        claims.put("productId", productId);
+        claims.put("platformAdmin", platformAdmin);
+        claims.put("companies", encodeCompanies(companies));
+        return issue("user:" + userId, props.getAccessTokenTtl(), claims);
+    }
+
+    private static List<Map<String, Object>> encodeCompanies(List<JwtPrincipal.CompanyMembership> companies) {
+        if (companies == null) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>(companies.size());
+        for (JwtPrincipal.CompanyMembership c : companies) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", c.id());
+            m.put("slug", c.slug());
+            m.put("owner", c.owner());
+            m.put("projects", encodeProjects(c.projects()));
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static List<Map<String, Object>> encodeProjects(List<JwtPrincipal.ProjectGrant> grants) {
+        if (grants == null) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>(grants.size());
+        for (JwtPrincipal.ProjectGrant g : grants) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", g.id());
+            m.put("role", g.role());
+            out.add(m);
+        }
+        return out;
     }
 
     public String issueAgentToken(long deviceId, long productId) {
@@ -108,7 +154,41 @@ public class JwtTokenService {
         Long deviceId = readLong(c, "deviceId");
         Long sessionId = readLong(c, "sessionId");
         Long productId = readLong(c, "productId");
-        return new JwtPrincipal(c.getSubject(), userId, deviceId, sessionId, role, productId);
+        Boolean platformAdmin = c.get("platformAdmin", Boolean.class);
+        List<JwtPrincipal.CompanyMembership> companies = readCompanies(c);
+        return new JwtPrincipal(
+                c.getSubject(), userId, deviceId, sessionId, role, productId,
+                platformAdmin != null && platformAdmin,
+                companies);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<JwtPrincipal.CompanyMembership> readCompanies(Claims c) {
+        Object raw = c.get("companies");
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) return null;
+        List<JwtPrincipal.CompanyMembership> out = new ArrayList<>(rawList.size());
+        for (Object o : rawList) {
+            if (!(o instanceof Map<?, ?> m)) continue;
+            long id = ((Number) m.get("id")).longValue();
+            String slug = (String) m.get("slug");
+            boolean owner = Boolean.TRUE.equals(m.get("owner"));
+            List<JwtPrincipal.ProjectGrant> projects = readProjects(m.get("projects"));
+            out.add(new JwtPrincipal.CompanyMembership(id, slug, owner, projects));
+        }
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<JwtPrincipal.ProjectGrant> readProjects(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) return List.of();
+        List<JwtPrincipal.ProjectGrant> out = new ArrayList<>(rawList.size());
+        for (Object o : rawList) {
+            if (!(o instanceof Map<?, ?> m)) continue;
+            long id = ((Number) m.get("id")).longValue();
+            String role = (String) m.get("role");
+            out.add(new JwtPrincipal.ProjectGrant(id, role));
+        }
+        return out;
     }
 
     private static Long readLong(Claims c, String key) {

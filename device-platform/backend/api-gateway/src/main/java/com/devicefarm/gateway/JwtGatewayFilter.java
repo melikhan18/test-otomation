@@ -24,6 +24,10 @@ public class JwtGatewayFilter implements GlobalFilter, Ordered {
     private static final Set<String> PUBLIC_PATH_PREFIXES = Set.of(
             "/api/auth/login",
             "/api/auth/refresh",
+            "/api/auth/signup",
+            // SSE notification stream — EventSource can't set Authorization headers,
+            // so it carries the token in ?access_token=... and is verified inside the controller.
+            "/api/notifications/stream",
             "/actuator",
             // WebSocket endpoints are validated by the bridge service itself (the token rides
             // in the query string because browsers can't set Authorization on a new WebSocket).

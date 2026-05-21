@@ -20,13 +20,14 @@ ARG SERVICE
 ENV TZ=UTC
 WORKDIR /opt/app
 
-# Only the bridge needs ffmpeg (for H.264 → MP4 remux during run recordings).
-# Conditional install keeps the other service images ~80MB lighter.
-RUN if [ "$SERVICE" = "device-bridge-service" ]; then \
-        apt-get update && \
-        apt-get install -y --no-install-recommends ffmpeg && \
-        rm -rf /var/lib/apt/lists/* ; \
-    fi
+# curl is needed by every container's healthcheck (probes /actuator/health). The
+# bridge additionally needs ffmpeg for H.264 → MP4 remux.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    if [ "$SERVICE" = "device-bridge-service" ]; then \
+        apt-get install -y --no-install-recommends ffmpeg; \
+    fi && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /workspace/${SERVICE}/build/libs/*.jar /opt/app/app.jar
 EXPOSE 8080

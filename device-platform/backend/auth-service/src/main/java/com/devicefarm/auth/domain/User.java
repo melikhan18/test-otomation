@@ -14,6 +14,10 @@ public class User {
     @Column(nullable = false, unique = true, length = 64)
     private String username;
 
+    /** Lowercase email used by invite-lookup; nullable for legacy users. */
+    @Column(length = 255)
+    private String email;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
@@ -25,6 +29,10 @@ public class User {
 
     @Column(nullable = false)
     private boolean enabled = true;
+
+    /** Platform-wide super-user. Crosses companies; rare. */
+    @Column(name = "platform_admin", nullable = false)
+    private boolean platformAdmin = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
@@ -39,6 +47,8 @@ public class User {
 
     public Long getId() { return id; }
     public String getUsername() { return username; }
+    public String getEmail() { return email; }
+    public void setEmail(String v) { this.email = v == null ? null : v.toLowerCase().trim(); }
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String h) { this.passwordHash = h; }
     public Long getProductId() { return productId; }
@@ -46,5 +56,7 @@ public class User {
     public void setRole(String r) { this.role = r; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean e) { this.enabled = e; }
+    public boolean isPlatformAdmin() { return platformAdmin; }
+    public void setPlatformAdmin(boolean v) { this.platformAdmin = v; }
     public Instant getCreatedAt() { return createdAt; }
 }

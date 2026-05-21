@@ -7,5 +7,7 @@ import java.util.Optional;
 
 public interface DeviceRepository extends JpaRepository<Device, Long> {
     List<Device> findAllByProductId(Long productId);
+    List<Device> findAllByCompanyId(Long companyId);
     Optional<Device> findByProductIdAndSerial(Long productId, String serial);
+    Optional<Device> findByCompanyIdAndSerial(Long companyId, String serial);
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,18 +16,36 @@ import {
   suiteRunApi, type RunStatus, type SuiteRunChild, type SuiteRunStatus, type SuiteRunView,
 } from "@/lib/automation";
 import { distinctTags, useReportFeed } from "@/lib/reports";
+import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/cn";
 
 export default function SuiteRunDetailPage() {
   const { suiteRunId } = useParams();
   const id = Number(suiteRunId);
   const nav = useNavigate();
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
+
+  // Suite-run id is project-scoped — bounce to Reports on tenancy switch so the
+  // user doesn't land on a permanent "Suite run not found" page.
+  const tenancySnapshot = useRef<{ c: number | null; p: number | null }>(
+    { c: activeCompanyId ?? null, p: activeProjectId ?? null },
+  );
+  useEffect(() => {
+    const prev = tenancySnapshot.current;
+    const next = { c: activeCompanyId ?? null, p: activeProjectId ?? null };
+    if (prev.c !== next.c || prev.p !== next.p) {
+      tenancySnapshot.current = next;
+      nav("/automation/reports", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId, activeProjectId]);
 
   // Poll while the suite is in flight; back off once it's terminal.
   const q = useQuery({
-    queryKey: ["automation-suite-run", id],
+    queryKey: ["automation-suite-run", activeCompanyId ?? null, id],
     queryFn: () => suiteRunApi.get(id),
-    enabled: !Number.isNaN(id),
+    enabled: !Number.isNaN(id) && activeCompanyId != null,
     refetchOnWindowFocus: false,
     refetchInterval: (qq) => {
       const s = qq.state.data?.status;

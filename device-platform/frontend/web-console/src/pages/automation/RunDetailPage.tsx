@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,18 +15,38 @@ import {
   runApi, STEP_ACTION_MAP, type RunStatus, type RunView, type StepResultStatus, type StepResultView,
 } from "@/lib/automation";
 import { distinctTags, useReportFeed } from "@/lib/reports";
+import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/cn";
 
 export default function RunDetailPage() {
   const { runId } = useParams();
   const id = Number(runId);
   const nav = useNavigate();
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
+
+  // The run id in the URL belongs to whatever project was active when the user
+  // landed here. If they switch tenancy in the sidebar, this id is suddenly in
+  // someone else's workspace — bounce back to Reports rather than render a
+  // permanent "Run not found" panel.
+  const tenancySnapshot = useRef<{ c: number | null; p: number | null }>(
+    { c: activeCompanyId ?? null, p: activeProjectId ?? null },
+  );
+  useEffect(() => {
+    const prev = tenancySnapshot.current;
+    const next = { c: activeCompanyId ?? null, p: activeProjectId ?? null };
+    if (prev.c !== next.c || prev.p !== next.p) {
+      tenancySnapshot.current = next;
+      nav("/automation/reports", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId, activeProjectId]);
 
   // Poll while the run is in flight; back off once it's terminal.
   const runQ = useQuery({
-    queryKey: ["automation-run", id],
+    queryKey: ["automation-run", activeCompanyId ?? null, id],
     queryFn: () => runApi.get(id),
-    enabled: !Number.isNaN(id),
+    enabled: !Number.isNaN(id) && activeCompanyId != null,
     refetchOnWindowFocus: false,
     refetchInterval: (q) => {
       const s = q.state.data?.status;

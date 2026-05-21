@@ -1,30 +1,60 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  BarChart3, Database, FolderKanban, LogOut, ShieldCheck, Smartphone, Target,
+  BarChart3, Building2, Database, FolderKanban, FolderOpen, LogOut, ShieldCheck,
+  Smartphone, Target, UserCircle2, UserCog, Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useAuthStore } from "@/store/auth";
+import { useAuthStore, useEffectiveRole, type EffectiveRole } from "@/store/auth";
+import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 type NavItem = { to: string; label: string; icon: React.ReactNode };
 type NavSection = { title: string; items: NavItem[] };
 
-const sections: NavSection[] = [
-  {
-    title: "Workspace",
-    items: [
-      { to: "/devices", label: "Devices", icon: <Smartphone size={16} /> },
-    ],
-  },
-  {
-    title: "Automation",
-    items: [
-      { to: "/automation/workspace", label: "Workspace", icon: <FolderKanban size={16} /> },
-      { to: "/automation/reports",   label: "Reports",   icon: <BarChart3 size={16} /> },
-      { to: "/automation/elements",  label: "Elements",  icon: <Target size={16} /> },
-      { to: "/automation/data",      label: "Test data", icon: <Database size={16} /> },
-    ],
-  },
-];
+function buildSections(platformAdmin: boolean, role: EffectiveRole): NavSection[] {
+  const isOwner   = role === "OWNER";
+  const isManager = role === "QA_MANAGER" || isOwner;
+
+  const sections: NavSection[] = [
+    {
+      title: "Workspace",
+      items: [
+        { to: "/devices", label: "Devices", icon: <Smartphone size={16} /> },
+      ],
+    },
+    {
+      title: "Automation",
+      items: [
+        { to: "/automation/workspace", label: "Workspace", icon: <FolderKanban size={16} /> },
+        { to: "/automation/reports",   label: "Reports",   icon: <BarChart3 size={16} /> },
+        { to: "/automation/elements",  label: "Elements",  icon: <Target size={16} /> },
+        { to: "/automation/data",      label: "Test data", icon: <Database size={16} /> },
+      ],
+    },
+  ];
+
+  // Settings — hide everything except Account from TESTERs. QA_MANAGERs keep
+  // Projects (so they can drill into the one they manage); Company + Members
+  // are OWNER-only.
+  const settingsItems: NavItem[] = [];
+  if (isOwner)   settingsItems.push({ to: "/settings/company",  label: "Company",  icon: <Building2 size={16} /> });
+  if (isManager) settingsItems.push({ to: "/settings/projects", label: "Projects", icon: <FolderOpen size={16} /> });
+  if (isOwner)   settingsItems.push({ to: "/settings/members",  label: "Members",  icon: <Users size={16} /> });
+  settingsItems.push({ to: "/account", label: "Account", icon: <UserCircle2 size={16} /> });
+  sections.push({ title: "Settings", items: settingsItems });
+
+  if (platformAdmin) {
+    sections.push({
+      title: "Platform",
+      items: [
+        { to: "/admin/companies", label: "Companies", icon: <Building2 size={16} /> },
+        { to: "/admin/users",     label: "Users",     icon: <UserCog size={16} /> },
+        { to: "/admin/devices",   label: "Devices",   icon: <Smartphone size={16} /> },
+      ],
+    });
+  }
+
+  return sections;
+}
 
 export default function Sidebar() {
   const nav = useNavigate();
@@ -32,7 +62,11 @@ export default function Sidebar() {
   // re-render loop. Subscribe to each field individually instead.
   const username = useAuthStore((s) => s.username);
   const role = useAuthStore((s) => s.role);
+  const platformAdmin = useAuthStore((s) => s.platformAdmin);
   const logout = useAuthStore((s) => s.logout);
+  const effectiveRole = useEffectiveRole();
+
+  const sections = buildSections(platformAdmin, effectiveRole);
 
   return (
     <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-surface-border bg-surface-raised/40">
@@ -45,6 +79,8 @@ export default function Sidebar() {
           <div className="text-[10px] text-ink-muted leading-tight">Mobile QA Cloud</div>
         </div>
       </div>
+
+      <WorkspaceSwitcher />
 
       <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
         {sections.map((section) => (
@@ -79,7 +115,8 @@ export default function Sidebar() {
           <div className="flex-1 min-w-0">
             <div className="text-xs font-medium truncate">{username}</div>
             <div className="text-[10px] text-ink-muted flex items-center gap-1">
-              {role === "ADMIN" ? <ShieldCheck size={10} /> : null} {role}
+              {platformAdmin ? <ShieldCheck size={10} className="text-brand-400" /> : null}
+              {platformAdmin ? "PLATFORM_ADMIN" : role}
             </div>
           </div>
           <button

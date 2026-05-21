@@ -6,15 +6,15 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TestDataRepository extends JpaRepository<TestDataEntity, Long> {
-    Optional<TestDataEntity> findByProductIdAndNameAndEnvironment(Long productId, String name, String environment);
-    boolean existsByProductIdAndNameAndEnvironment(Long productId, String name, String environment);
+    Optional<TestDataEntity> findByProjectIdAndNameAndEnvironment(Long projectId, String name, String environment);
+    boolean existsByProjectIdAndNameAndEnvironment(Long projectId, String name, String environment);
 
-    List<TestDataEntity> findAllByProductIdOrderByNameAscEnvironmentAsc(Long productId);
-    List<TestDataEntity> findAllByProductIdAndEnvironmentOrderByNameAsc(Long productId, String environment);
+    List<TestDataEntity> findAllByProjectIdOrderByNameAscEnvironmentAsc(Long projectId);
+    List<TestDataEntity> findAllByProjectIdAndEnvironmentOrderByNameAsc(Long projectId, String environment);
 
-    /** Distinct environments configured under a product — drives the env selector. */
+    /** Distinct environments configured under a project — drives the env selector. */
     @org.springframework.data.jpa.repository.Query(
-        "SELECT DISTINCT t.environment FROM TestDataEntity t WHERE t.productId = :productId ORDER BY t.environment"
+        "SELECT DISTINCT t.environment FROM TestDataEntity t WHERE t.projectId = :projectId ORDER BY t.environment"
     )
-    List<String> findDistinctEnvironments(@org.springframework.data.repository.query.Param("productId") Long productId);
+    List<String> findDistinctEnvironments(@org.springframework.data.repository.query.Param("projectId") Long projectId);
 }

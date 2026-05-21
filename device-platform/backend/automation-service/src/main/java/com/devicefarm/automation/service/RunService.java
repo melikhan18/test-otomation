@@ -3,6 +3,7 @@ package com.devicefarm.automation.service;
 import com.devicefarm.automation.api.dto.RunDtos;
 import com.devicefarm.automation.domain.*;
 import com.devicefarm.automation.service.run.RunOrchestrator;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.error.ApiException;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
@@ -30,22 +31,17 @@ public class RunService {
         this.orchestrator = orchestrator;
     }
 
-    /**
-     * Create a run and schedule it on the background pool.
-     * The user JWT is required so the orchestrator can reserve a device session on their
-     * behalf (session-service enforces ownership).
-     */
     @Transactional
-    public RunDtos.View create(JwtPrincipal caller, RunDtos.CreateRequest req, String userJwt) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
+    public RunDtos.View create(JwtPrincipal caller, ProjectContext ctx,
+                               RunDtos.CreateRequest req, String userJwt) {
         if (userJwt == null || userJwt.isBlank()) throw ApiException.unauthorized("missing Authorization header");
 
         ScenarioEntity sc = scenarios.findById(req.scenarioId())
                 .orElseThrow(() -> ApiException.notFound("scenario"));
-        if (!sc.getProductId().equals(caller.productId())) throw ApiException.forbidden("cross-product");
+        if (!ctx.projectId().equals(sc.getProjectId())) throw ApiException.forbidden("scenario not in active project");
 
-        RunEntity run = new RunEntity(caller.productId(), sc.getId(), req.deviceId(),
-                caller.userId(), req.environment());
+        RunEntity run = new RunEntity(ctx.legacyProductId(), ctx.projectId(),
+                sc.getId(), req.deviceId(), caller.userId(), req.environment());
         run.setScenarioVersion(sc.getVersion());
         if (req.interStepDelayMs() != null) {
             run.setInterStepDelayMs(Math.max(0, Math.min(30_000, req.interStepDelayMs())));
@@ -55,8 +51,6 @@ public class RunService {
         }
         run = runs.save(run);
 
-        // Submit AFTER commit — otherwise the worker thread races the transaction and
-        // sees an empty `runs.findById(runId)` ("run not found"), leaving the run stuck in QUEUED.
         final long runId = run.getId();
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -69,21 +63,18 @@ public class RunService {
     }
 
     @Transactional(readOnly = true)
-    public RunDtos.View get(JwtPrincipal caller, long id) {
-        RunEntity run = ensureOwned(caller, id);
+    public RunDtos.View get(JwtPrincipal caller, ProjectContext ctx, long id) {
+        RunEntity run = ensureInProject(ctx, id);
         ScenarioEntity sc = run.getScenarioId() != null ? scenarios.findById(run.getScenarioId()).orElse(null) : null;
         return toView(run, sc);
     }
 
     @Transactional(readOnly = true)
-    public List<RunDtos.Summary> list(JwtPrincipal caller, Long scenarioId) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        Long pid = caller.productId();
+    public List<RunDtos.Summary> list(JwtPrincipal caller, ProjectContext ctx, Long scenarioId) {
         List<RunEntity> raw = scenarioId != null
-                ? runs.findTop50ByProductIdAndScenarioIdOrderByCreatedAtDesc(pid, scenarioId)
-                : runs.findTop200ByProductIdOrderByCreatedAtDesc(pid);
+                ? runs.findTop50ByProjectIdAndScenarioIdOrderByCreatedAtDesc(ctx.projectId(), scenarioId)
+                : runs.findTop200ByProjectIdOrderByCreatedAtDesc(ctx.projectId());
 
-        // Bulk-fetch the referenced scenarios for nice display labels.
         var scenarioIds = raw.stream().map(RunEntity::getScenarioId).filter(java.util.Objects::nonNull).distinct().toList();
         Map<Long, String> names = new HashMap<>();
         if (!scenarioIds.isEmpty()) {
@@ -102,10 +93,9 @@ public class RunService {
         )).toList();
     }
 
-    /** Replace the tag set on a run. Returns the refreshed view so the UI can render. */
     @Transactional
-    public RunDtos.View updateTags(JwtPrincipal caller, long id, List<String> tags) {
-        RunEntity run = ensureOwned(caller, id);
+    public RunDtos.View updateTags(JwtPrincipal caller, ProjectContext ctx, long id, List<String> tags) {
+        RunEntity run = ensureInProject(ctx, id);
         run.setTags(Tags.normalize(tags));
         runs.save(run);
         ScenarioEntity sc = run.getScenarioId() != null
@@ -115,10 +105,9 @@ public class RunService {
 
     /* ──────────────────────  helpers  ──────────────────────── */
 
-    private RunEntity ensureOwned(JwtPrincipal caller, long id) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
+    private RunEntity ensureInProject(ProjectContext ctx, long id) {
         RunEntity r = runs.findById(id).orElseThrow(() -> ApiException.notFound("run"));
-        if (!r.getProductId().equals(caller.productId())) throw ApiException.forbidden("cross-product");
+        if (!ctx.projectId().equals(r.getProjectId())) throw ApiException.forbidden("run not in active project");
         return r;
     }
 

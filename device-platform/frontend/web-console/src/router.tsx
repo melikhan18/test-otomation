@@ -1,6 +1,14 @@
 import { Navigate, Outlet, createBrowserRouter, useParams, useSearchParams } from "react-router-dom";
-import { useAuthStore } from "@/store/auth";
+import { useAuthStore, useEffectiveRole } from "@/store/auth";
 import LoginPage from "@/pages/LoginPage";
+import SignupPage from "@/pages/SignupPage";
+import AccountPage from "@/pages/AccountPage";
+import AdminUsersPage from "@/pages/AdminUsersPage";
+import AdminDevicesPage from "@/pages/AdminDevicesPage";
+import AdminCompaniesPage from "@/pages/AdminCompaniesPage";
+import CompanySettingsPage from "@/pages/CompanySettingsPage";
+import ProjectsSettingsPage from "@/pages/ProjectsSettingsPage";
+import ProjectDetailPage from "@/pages/ProjectDetailPage";
 import DevicesPage from "@/pages/DevicesPage";
 import SessionPage from "@/pages/SessionPage";
 import ElementsPage from "@/pages/automation/ElementsPage";
@@ -9,11 +17,37 @@ import WorkspacePage from "@/pages/automation/WorkspacePage";
 import RunDetailPage from "@/pages/automation/RunDetailPage";
 import SuiteRunDetailPage from "@/pages/automation/SuiteRunDetailPage";
 import ReportsPage from "@/pages/automation/ReportsPage";
+import MembersPage from "@/pages/MembersPage";
 import AppLayout from "@/components/AppLayout";
 
 function RequireAuth() {
   const accessToken = useAuthStore((s) => s.accessToken);
   if (!accessToken) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
+/** Gates routes that only platform admins should reach (e.g. /admin/users). */
+function RequirePlatformAdmin() {
+  const platformAdmin = useAuthStore((s) => s.platformAdmin);
+  if (!platformAdmin) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
+/**
+ * Route-level role gating for the company-scoped settings pages. {@code OWNER}
+ * locks down rename / archive / members; {@code MANAGER} (OWNER or QA_MANAGER
+ * on at least one project) gates the project list + project detail.
+ *
+ * Pages also hide themselves from the sidebar at the same threshold, so this is
+ * the defense-in-depth layer that catches direct URL hits (bookmarks, deep
+ * links) for users who shouldn't be there.
+ */
+function RequireRole({ minRole }: { minRole: "OWNER" | "MANAGER" }) {
+  const role = useEffectiveRole();
+  const allowed =
+    minRole === "OWNER"   ? role === "OWNER"
+                          : role === "OWNER" || role === "QA_MANAGER";
+  if (!allowed) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 
@@ -37,7 +71,8 @@ function RedirectRuns() {
 }
 
 export const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
+  { path: "/login",  element: <LoginPage /> },
+  { path: "/signup", element: <SignupPage /> },
   {
     element: <RequireAuth />,
     children: [
@@ -47,6 +82,35 @@ export const router = createBrowserRouter([
           { path: "/", element: <Navigate to="/devices" replace /> },
           { path: "/devices", element: <DevicesPage /> },
           { path: "/sessions/:sessionId", element: <SessionPage /> },
+
+          { path: "/account", element: <AccountPage /> },
+
+          // OWNER-only: company rename / archive + company-wide members matrix.
+          {
+            element: <RequireRole minRole="OWNER" />,
+            children: [
+              { path: "/settings/company", element: <CompanySettingsPage /> },
+              { path: "/settings/members", element: <MembersPage /> },
+            ],
+          },
+          // OWNER + QA_MANAGER: project list and per-project settings (project
+          // detail). TESTERs work via the automation pages and don't need this.
+          {
+            element: <RequireRole minRole="MANAGER" />,
+            children: [
+              { path: "/settings/projects",     element: <ProjectsSettingsPage /> },
+              { path: "/settings/projects/:id", element: <ProjectDetailPage /> },
+            ],
+          },
+
+          {
+            element: <RequirePlatformAdmin />,
+            children: [
+              { path: "/admin/users",     element: <AdminUsersPage /> },
+              { path: "/admin/devices",   element: <AdminDevicesPage /> },
+              { path: "/admin/companies", element: <AdminCompaniesPage /> },
+            ],
+          },
 
           { path: "/automation",                element: <Navigate to="/automation/workspace" replace /> },
           { path: "/automation/workspace",      element: <WorkspacePage /> },

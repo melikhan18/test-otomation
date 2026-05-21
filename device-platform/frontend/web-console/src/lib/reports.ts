@@ -4,6 +4,7 @@ import {
   runApi, suiteRunApi,
   type RunSummary, type SuiteRunSummary,
 } from "@/lib/automation";
+import { useAuthStore } from "@/store/auth";
 
 /* ───────────────────────────  Feed model  ────────────────────────────
  * One unified report stream: standalone runs (suiteRunId == null) plus suite
@@ -21,26 +22,31 @@ const POLL_IDLE_MS = 6000;
 
 export function useReportFeed(opts?: { scenarioId?: number }) {
   const scenarioId = opts?.scenarioId;
+  // No workspace → skip every poll. Otherwise the 1.5s/6s interval spams the
+  // gateway with 403s before AppLayout's gate even gets a chance to swap views.
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+  const tenancyReady = activeCompanyId != null;
 
   const runsQ = useQuery({
-    queryKey: ["automation-runs", scenarioId ?? null],
+    queryKey: ["automation-runs", activeCompanyId ?? null, scenarioId ?? null],
     queryFn: () => runApi.list(scenarioId),
     refetchInterval: (q) =>
       (q.state.data ?? []).some((r) => r.status === "QUEUED" || r.status === "RUNNING")
         ? POLL_LIVE_MS : POLL_IDLE_MS,
     refetchOnWindowFocus: false,
+    enabled: tenancyReady,
   });
 
   // Suite-level rows are unrelated to a single scenario filter, so we omit
   // them when scenarioId is set — feed becomes pure run view in that mode.
   const suitesQ = useQuery({
-    queryKey: ["automation-suite-runs"],
+    queryKey: ["automation-suite-runs", activeCompanyId ?? null],
     queryFn: () => suiteRunApi.list(),
     refetchInterval: (q) =>
       (q.state.data ?? []).some((r) => r.status === "QUEUED" || r.status === "RUNNING")
         ? POLL_LIVE_MS : POLL_IDLE_MS,
     refetchOnWindowFocus: false,
-    enabled: scenarioId == null,
+    enabled: tenancyReady && scenarioId == null,
   });
 
   const items: ReportItem[] = useMemo(() => {

@@ -13,6 +13,7 @@ public class ElementEntity {
     private Long id;
 
     @Column(name = "product_id", nullable = false) private Long productId;
+    @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(nullable = false, length = 160)         private String name;
     @Column(columnDefinition = "TEXT")              private String description;
 
@@ -39,8 +40,9 @@ public class ElementEntity {
 
     protected ElementEntity() {}
 
-    public ElementEntity(Long productId, String name, LocatorStrategy primaryStrategy, String primaryValue, Long createdByUserId) {
+    public ElementEntity(Long productId, Long projectId, String name, LocatorStrategy primaryStrategy, String primaryValue, Long createdByUserId) {
         this.productId = productId;
+        this.projectId = projectId;
         this.name = name;
         this.primaryStrategy = primaryStrategy;
         this.primaryValue = primaryValue;
@@ -51,6 +53,7 @@ public class ElementEntity {
 
     public Long getId() { return id; }
     public Long getProductId() { return productId; }
+    public Long getProjectId() { return projectId; }
     public String getName() { return name; }                public void setName(String v) { this.name = v; }
     public String getDescription() { return description; }   public void setDescription(String v) { this.description = v; }
     public LocatorStrategy getPrimaryStrategy() { return primaryStrategy; } public void setPrimaryStrategy(LocatorStrategy v) { this.primaryStrategy = v; }

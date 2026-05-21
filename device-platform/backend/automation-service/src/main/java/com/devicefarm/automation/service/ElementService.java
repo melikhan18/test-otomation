@@ -3,6 +3,7 @@ package com.devicefarm.automation.service;
 import com.devicefarm.automation.api.dto.ElementDtos;
 import com.devicefarm.automation.domain.ElementEntity;
 import com.devicefarm.automation.domain.ElementRepository;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.error.ApiException;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
@@ -18,12 +19,12 @@ public class ElementService {
     public ElementService(ElementRepository repo) { this.repo = repo; }
 
     @Transactional
-    public ElementDtos.View create(JwtPrincipal caller, ElementDtos.CreateRequest req) {
-        Long pid = requireProduct(caller);
-        if (repo.existsByProductIdAndName(pid, req.name())) {
-            throw ApiException.conflict("element name already exists in this product");
+    public ElementDtos.View create(JwtPrincipal caller, ProjectContext ctx, ElementDtos.CreateRequest req) {
+        if (repo.existsByProjectIdAndName(ctx.projectId(), req.name())) {
+            throw ApiException.conflict("element name already exists in this project");
         }
-        ElementEntity e = new ElementEntity(pid, req.name(), req.primaryStrategy(), req.primaryValue(), caller.userId());
+        ElementEntity e = new ElementEntity(ctx.legacyProductId(), ctx.projectId(),
+                req.name(), req.primaryStrategy(), req.primaryValue(), caller.userId());
         e.setDescription(req.description());
         e.setFallbackLocatorsJson(LocatorJson.write(req.fallbackLocators()));
         e.setScreenshotData(req.screenshotData());
@@ -35,11 +36,11 @@ public class ElementService {
     }
 
     @Transactional
-    public ElementDtos.View update(JwtPrincipal caller, long id, ElementDtos.UpdateRequest req) {
-        ElementEntity e = ensureOwned(caller, id);
+    public ElementDtos.View update(JwtPrincipal caller, ProjectContext ctx, long id, ElementDtos.UpdateRequest req) {
+        ElementEntity e = ensureInProject(ctx, id);
         if (!e.getName().equals(req.name())
-                && repo.existsByProductIdAndName(e.getProductId(), req.name())) {
-            throw ApiException.conflict("element name already exists in this product");
+                && repo.existsByProjectIdAndName(ctx.projectId(), req.name())) {
+            throw ApiException.conflict("element name already exists in this project");
         }
         e.setName(req.name());
         e.setDescription(req.description());
@@ -50,34 +51,27 @@ public class ElementService {
     }
 
     @Transactional
-    public void delete(JwtPrincipal caller, long id) {
-        repo.delete(ensureOwned(caller, id));
+    public void delete(JwtPrincipal caller, ProjectContext ctx, long id) {
+        repo.delete(ensureInProject(ctx, id));
     }
 
     @Transactional(readOnly = true)
-    public ElementDtos.View get(JwtPrincipal caller, long id) {
-        return toView(ensureOwned(caller, id));
+    public ElementDtos.View get(JwtPrincipal caller, ProjectContext ctx, long id) {
+        return toView(ensureInProject(ctx, id));
     }
 
     @Transactional(readOnly = true)
-    public List<ElementDtos.View> list(JwtPrincipal caller, String q) {
-        Long pid = requireProduct(caller);
+    public List<ElementDtos.View> list(JwtPrincipal caller, ProjectContext ctx, String q) {
         List<ElementEntity> raw = (q == null || q.isBlank())
-                ? repo.findAllByProductIdOrderByNameAsc(pid)
-                : repo.searchByProductId(pid, q.trim());
+                ? repo.findAllByProjectIdOrderByNameAsc(ctx.projectId())
+                : repo.searchByProjectId(ctx.projectId(), q.trim());
         return raw.stream().map(this::toView).toList();
     }
 
-    private ElementEntity ensureOwned(JwtPrincipal caller, long id) {
-        Long pid = requireProduct(caller);
+    private ElementEntity ensureInProject(ProjectContext ctx, long id) {
         ElementEntity e = repo.findById(id).orElseThrow(() -> ApiException.notFound("element"));
-        if (!e.getProductId().equals(pid)) throw ApiException.forbidden("cross-product access");
+        if (!ctx.projectId().equals(e.getProjectId())) throw ApiException.forbidden("element not in active project");
         return e;
-    }
-
-    private static Long requireProduct(JwtPrincipal caller) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        return caller.productId();
     }
 
     private ElementDtos.View toView(ElementEntity e) {

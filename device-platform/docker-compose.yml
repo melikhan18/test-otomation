@@ -101,6 +101,15 @@ services:
       redis:    { condition: service_healthy }
     ports:
       - "8081:8081"
+    # Probes the actuator endpoint — only OK after Flyway finishes & Tomcat is
+    # bound, which guarantees the tenancy tables (V3) exist before downstream
+    # services try to backfill cross-schema in V2/V10.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   device-service:
     build:
@@ -112,10 +121,18 @@ services:
       # Spring relaxed-binding: APP_BRIDGE_PUBLIC_WS_URL → app.bridge.public-ws-url
       APP_BRIDGE_PUBLIC_WS_URL: ws://localhost:8080/ws/agent
     depends_on:
-      postgres: { condition: service_healthy }
-      redis:    { condition: service_healthy }
+      postgres:     { condition: service_healthy }
+      redis:        { condition: service_healthy }
+      # device.V2 reads auth.companies for backfill — wait for V3 to finish.
+      auth-service: { condition: service_healthy }
     ports:
       - "8082:8082"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   session-service:
     build:
@@ -129,6 +146,12 @@ services:
       redis:    { condition: service_healthy }
     ports:
       - "8083:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   device-bridge-service:
     build:
@@ -141,6 +164,12 @@ services:
       redis: { condition: service_healthy }
     ports:
       - "8084:8084"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8084/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   automation-service:
     build:
@@ -157,11 +186,19 @@ services:
       RETENTION_CRON:    "0 0 3 * * *"
     depends_on:
       postgres: { condition: service_healthy }
-      session-service: { condition: service_started }
+      # automation.V10 reads auth.companies/projects for backfill — wait for V3.
+      auth-service:          { condition: service_healthy }
+      session-service:       { condition: service_started }
       device-bridge-service: { condition: service_started }
-      minio: { condition: service_healthy }
+      minio:                 { condition: service_healthy }
     ports:
       - "8085:8085"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8085/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   api-gateway:
     build:

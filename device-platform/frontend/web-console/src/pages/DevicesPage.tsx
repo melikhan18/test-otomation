@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Check, ChevronRight, Copy, KeyRound, Plus, Search, Smartphone, X,
+  Check, ChevronRight, Copy, KeyRound, Lock, Plus, Search, Smartphone, Unlock, X,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -10,13 +10,16 @@ import { Card } from "@/components/ui/Card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import DeviceAccessDialog from "@/components/DeviceAccessDialog";
 import { deviceApi, type Device } from "@/lib/devices";
 import { sessionApi } from "@/lib/sessions";
-import { useAuthStore } from "@/store/auth";
+import { useAuthStore, useEffectiveRole } from "@/store/auth";
 import { cn } from "@/lib/cn";
 
 export default function DevicesPage() {
-  const role = useAuthStore((s) => s.role);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+  const effectiveRole = useEffectiveRole();
+  const isOwner = effectiveRole === "OWNER";
   const qc = useQueryClient();
   const nav = useNavigate();
   const [enrollToken, setEnrollToken] = useState<{ token: string; expiresAt: string } | null>(null);
@@ -25,9 +28,12 @@ export default function DevicesPage() {
   const [filter, setFilter] = useState<"all" | "ONLINE" | "OFFLINE" | "IN_USE">("all");
 
   const devicesQuery = useQuery({
-    queryKey: ["devices"],
+    queryKey: ["devices", activeCompanyId],
     queryFn: deviceApi.list,
     refetchInterval: 5_000,
+    // Skip the call entirely until the user has picked a company — otherwise the
+    // backend rejects with 400 "missing X-Company-Id" every 5s.
+    enabled: activeCompanyId != null,
   });
 
   const issueToken = useMutation({
@@ -65,7 +71,7 @@ export default function DevicesPage() {
     <>
       <TopBar
         crumbs={[{ label: "Devices" }]}
-        actions={role === "ADMIN" && (
+        actions={isOwner && (
           <Button
             variant="primary"
             size="sm"
@@ -131,7 +137,7 @@ export default function DevicesPage() {
               description={devicesQuery.data?.length
                 ? "Try adjusting the search or status filter."
                 : "Generate an enrollment token and install the agent APK on your Android device or emulator."}
-              action={role === "ADMIN" && !devicesQuery.data?.length && (
+              action={isOwner && !devicesQuery.data?.length && (
                 <Button variant="primary" size="sm" leftIcon={<KeyRound size={14} />}
                         onClick={() => issueToken.mutate()} loading={issueToken.isPending}>
                   Generate enrollment token
@@ -145,8 +151,10 @@ export default function DevicesPage() {
               <DeviceCard
                 key={d.id}
                 device={d}
+                canManageAccess={isOwner}
                 disabled={startSession.isPending || d.status !== "ONLINE"}
                 onConnect={() => { setError(null); startSession.mutate(d.id); }}
+                onAccessChanged={() => devicesQuery.refetch()}
               />
             ))}
           </div>
@@ -174,9 +182,19 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: "inf
 }
 
 function DeviceCard({
-  device, onConnect, disabled,
-}: { device: Device; onConnect: () => void; disabled: boolean }) {
+  device, onConnect, disabled, onAccessChanged, canManageAccess,
+}: {
+  device: Device;
+  onConnect: () => void;
+  disabled: boolean;
+  onAccessChanged?: () => void;
+  /** Show the per-device project access dialog trigger. OWNER-only on backend,
+   *  so we hide it for everyone else to keep the UI honest. */
+  canManageAccess: boolean;
+}) {
   const tone = device.status === "ONLINE" ? "success" : device.status === "IN_USE" ? "warning" : "neutral";
+  const [accessOpen, setAccessOpen] = useState(false);
+
   return (
     <Card className="p-5 flex flex-col gap-4 transition-colors hover:border-brand-500/40 group">
       <div className="flex items-start justify-between gap-2">
@@ -199,18 +217,38 @@ function DeviceCard({
         <Field label="Last seen" value={device.lastSeenAt ? formatRel(device.lastSeenAt) : "—"} />
       </dl>
 
-      <Button
-        variant={device.status === "ONLINE" ? "primary" : "secondary"}
-        size="md"
-        onClick={onConnect}
-        disabled={disabled}
-        rightIcon={<ChevronRight size={14} />}
-        className="mt-auto"
-      >
-        {device.status === "IN_USE" ? "In use by another user"
-         : device.status === "OFFLINE" ? "Device offline"
-         : "Open session"}
-      </Button>
+      <div className="flex items-center gap-2 mt-auto">
+        <Button
+          variant={device.status === "ONLINE" ? "primary" : "secondary"}
+          size="md"
+          onClick={onConnect}
+          disabled={disabled}
+          rightIcon={<ChevronRight size={14} />}
+          className="flex-1"
+        >
+          {device.status === "IN_USE" ? "In use by another user"
+           : device.status === "OFFLINE" ? "Device offline"
+           : "Open session"}
+        </Button>
+        {canManageAccess && (
+          <button
+            onClick={() => setAccessOpen(true)}
+            className="h-9 w-9 rounded-md border border-surface-border bg-surface hover:border-brand-500/40 text-ink-secondary hover:text-ink-primary flex items-center justify-center shrink-0"
+            title="Manage which projects can use this device"
+          >
+            <Lock size={13} />
+          </button>
+        )}
+      </div>
+
+      {accessOpen && (
+        <DeviceAccessDialog
+          deviceId={device.id}
+          deviceLabel={`${device.manufacturer} ${device.model}`}
+          onClose={() => setAccessOpen(false)}
+          onSaved={onAccessChanged}
+        />
+      )}
     </Card>
   );
 }

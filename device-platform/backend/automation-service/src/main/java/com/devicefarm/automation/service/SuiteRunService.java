@@ -3,6 +3,7 @@ package com.devicefarm.automation.service;
 import com.devicefarm.automation.api.dto.SuiteRunDtos;
 import com.devicefarm.automation.domain.*;
 import com.devicefarm.automation.service.run.SuiteRunOrchestrator;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.error.ApiException;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
@@ -36,22 +37,22 @@ public class SuiteRunService {
     }
 
     @Transactional
-    public SuiteRunDtos.View create(JwtPrincipal caller, SuiteRunDtos.CreateRequest req, String userJwt) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
+    public SuiteRunDtos.View create(JwtPrincipal caller, ProjectContext ctx,
+                                    SuiteRunDtos.CreateRequest req, String userJwt) {
         if (userJwt == null || userJwt.isBlank()) throw ApiException.unauthorized("missing Authorization header");
 
         SuiteEntity suite = suites.findById(req.suiteId())
                 .orElseThrow(() -> ApiException.notFound("suite"));
-        if (!suite.getProductId().equals(caller.productId())) throw ApiException.forbidden("cross-product");
+        if (!ctx.projectId().equals(suite.getProjectId())) throw ApiException.forbidden("suite not in active project");
 
         long scenarioCount = suiteScenarios.countBySuiteId(suite.getId());
         if (scenarioCount == 0) throw ApiException.badRequest("suite has no scenarios");
 
-        SuiteRunEntity sr = new SuiteRunEntity(caller.productId(), suite.getId(), suite.getName(),
+        SuiteRunEntity sr = new SuiteRunEntity(ctx.legacyProductId(), ctx.projectId(),
+                suite.getId(), suite.getName(),
                 req.deviceId(), caller.userId(), req.environment());
         sr = suiteRuns.save(sr);
 
-        // After commit submission — see RunService for the same race justification.
         final long sid = sr.getId();
         final Integer isd = req.interStepDelayMs();
         final Boolean aw  = req.adaptiveWait();
@@ -66,27 +67,29 @@ public class SuiteRunService {
     }
 
     @Transactional(readOnly = true)
-    public SuiteRunDtos.View get(JwtPrincipal caller, long id) {
-        SuiteRunEntity sr = ensureOwned(caller, id);
-        return toView(sr);
+    public SuiteRunDtos.View get(JwtPrincipal caller, ProjectContext ctx, long id) {
+        return toView(ensureInProject(ctx, id));
     }
 
     @Transactional(readOnly = true)
-    public List<SuiteRunDtos.Summary> list(JwtPrincipal caller, Long suiteId) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        Long pid = caller.productId();
+    public List<SuiteRunDtos.Summary> list(JwtPrincipal caller, ProjectContext ctx, Long suiteId) {
         List<SuiteRunEntity> raw = suiteId != null
-                ? suiteRuns.findTop50ByProductIdAndSuiteIdOrderByCreatedAtDesc(pid, suiteId)
-                : suiteRuns.findTop100ByProductIdOrderByCreatedAtDesc(pid);
+                ? suiteRuns.findTop50ByProjectIdAndSuiteIdOrderByCreatedAtDesc(ctx.projectId(), suiteId)
+                : suiteRuns.findTop100ByProjectIdOrderByCreatedAtDesc(ctx.projectId());
         return raw.stream().map(this::toSummary).toList();
     }
 
-    /* ──────────────────────  helpers  ──────────────────────── */
+    @Transactional
+    public SuiteRunDtos.View updateTags(JwtPrincipal caller, ProjectContext ctx, long id, List<String> tags) {
+        SuiteRunEntity sr = ensureInProject(ctx, id);
+        sr.setTags(Tags.normalize(tags));
+        suiteRuns.save(sr);
+        return toView(sr);
+    }
 
-    private SuiteRunEntity ensureOwned(JwtPrincipal caller, long id) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
+    private SuiteRunEntity ensureInProject(ProjectContext ctx, long id) {
         SuiteRunEntity sr = suiteRuns.findById(id).orElseThrow(() -> ApiException.notFound("suite run"));
-        if (!sr.getProductId().equals(caller.productId())) throw ApiException.forbidden("cross-product");
+        if (!ctx.projectId().equals(sr.getProjectId())) throw ApiException.forbidden("suite run not in active project");
         return sr;
     }
 
@@ -100,26 +103,14 @@ public class SuiteRunService {
                 sr.getCreatedAt(), sr.getStartedAt(), sr.getFinishedAt());
     }
 
-    /** Replace the tag set on a suite run. */
-    @Transactional
-    public SuiteRunDtos.View updateTags(JwtPrincipal caller, long id, List<String> tags) {
-        SuiteRunEntity sr = ensureOwned(caller, id);
-        sr.setTags(Tags.normalize(tags));
-        suiteRuns.save(sr);
-        return toView(sr);
-    }
-
     private SuiteRunDtos.View toView(SuiteRunEntity sr) {
         List<RunEntity> childRuns = runs.findAllBySuiteRunIdOrderByCreatedAtAsc(sr.getId());
-
-        // Bulk-fetch scenario names so we don't N+1 query inside the map below.
         var scenarioIds = childRuns.stream()
                 .map(RunEntity::getScenarioId).filter(java.util.Objects::nonNull).distinct().toList();
         Map<Long, String> names = new HashMap<>();
         if (!scenarioIds.isEmpty()) {
             scenarios.findAllById(scenarioIds).forEach(s -> names.put(s.getId(), s.getName()));
         }
-
         var children = childRuns.stream().map(r -> new SuiteRunDtos.ChildRun(
                 r.getId(), r.getScenarioId(),
                 r.getScenarioId() != null ? names.get(r.getScenarioId()) : null,

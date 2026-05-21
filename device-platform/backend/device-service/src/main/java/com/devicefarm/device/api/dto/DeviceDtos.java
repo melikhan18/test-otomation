@@ -13,6 +13,21 @@ public class DeviceDtos {
                              String agentVersion, Instant enrolledAt, Instant lastSeenAt,
                              DeviceStatus status, Long currentSessionId) {}
 
+    /**
+     * Cross-tenant view used by the platform-admin devices page. Adds {@code companyId}
+     * and {@code restricted} so the UI can render a tenant column and the per-row
+     * access toggle without an extra round-trip.
+     */
+    public record AdminDeviceView(long id, long productId, Long companyId, String serial,
+                                   String manufacturer, String model,
+                                   String androidVersion, int screenWidth, int screenHeight,
+                                   String agentVersion, Instant enrolledAt, Instant lastSeenAt,
+                                   DeviceStatus status, Long currentSessionId,
+                                   boolean restricted, int accessProjectCount) {}
+
+    /** Admin reassign payload — move a device to a different tenant. */
+    public record AdminReassignRequest(@jakarta.validation.constraints.NotNull Long companyId) {}
+
     public record EnrollmentTokenView(String token, Instant expiresAt) {}
 
     public record EnrollRequest(@NotBlank String enrollmentToken,

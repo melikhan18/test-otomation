@@ -187,7 +187,7 @@ public class StepRunner {
             TestDataEntity td = testData.findById(step.getDataId()).orElse(null);
             if (td == null) return null;
             if (environment != null && !td.getEnvironment().equals(environment)) {
-                var byEnv = testData.findByProductIdAndNameAndEnvironment(td.getProductId(), td.getName(), environment);
+                var byEnv = testData.findByProjectIdAndNameAndEnvironment(td.getProjectId(), td.getName(), environment);
                 if (byEnv.isPresent()) return byEnv.get().getValue();
             }
             return td.getValue();

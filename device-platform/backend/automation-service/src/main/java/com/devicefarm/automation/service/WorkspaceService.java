@@ -2,7 +2,7 @@ package com.devicefarm.automation.service;
 
 import com.devicefarm.automation.api.dto.WorkspaceDtos;
 import com.devicefarm.automation.domain.*;
-import com.devicefarm.common.error.ApiException;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,12 +34,9 @@ public class WorkspaceService {
      *   4. group scenarios by suite + compute orphans
      */
     @Transactional(readOnly = true)
-    public WorkspaceDtos.Tree tree(JwtPrincipal caller) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        Long pid = caller.productId();
-
-        List<SuiteEntity>    suiteList    = suites.findAllByProductIdOrderByUpdatedAtDesc(pid);
-        List<ScenarioEntity> scenarioList = scenarios.findAllByProductIdOrderByUpdatedAtDesc(pid);
+    public WorkspaceDtos.Tree tree(JwtPrincipal caller, ProjectContext ctx) {
+        List<SuiteEntity>    suiteList    = suites.findAllByProjectIdOrderByUpdatedAtDesc(ctx.projectId());
+        List<ScenarioEntity> scenarioList = scenarios.findAllByProjectIdOrderByUpdatedAtDesc(ctx.projectId());
         Map<Long, ScenarioEntity> scenarioById = scenarioList.stream()
                 .collect(Collectors.toMap(ScenarioEntity::getId, x -> x));
 

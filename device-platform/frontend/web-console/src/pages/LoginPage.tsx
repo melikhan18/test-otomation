@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AlertCircle, ArrowRight, Lock, Smartphone, User } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/Button";
@@ -128,6 +128,13 @@ export default function LoginPage() {
 
           <div className="rounded-md border border-surface-border bg-surface-raised/50 px-4 py-3 text-[11px] text-ink-muted">
             Demo credentials: <span className="kbd">admin</span> / <span className="kbd">Admin@123</span>
+          </div>
+
+          <div className="text-center text-xs text-ink-muted">
+            No account yet?{" "}
+            <Link to="/signup" className="text-brand-300 hover:text-brand-400 font-medium">
+              Create one
+            </Link>
           </div>
         </div>
       </div>

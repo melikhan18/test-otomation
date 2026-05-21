@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ChevronRight, Smartphone } from "lucide-react";
+import NotificationBell from "@/components/NotificationBell";
 
 type Crumb = { label: string; to?: string };
 
@@ -32,7 +33,10 @@ export default function TopBar({
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-2">{actions}</div>
+      <div className="flex items-center gap-2">
+        {actions}
+        <NotificationBell />
+      </div>
     </header>
   );
 }

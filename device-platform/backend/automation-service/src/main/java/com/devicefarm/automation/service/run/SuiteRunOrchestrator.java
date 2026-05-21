@@ -127,7 +127,8 @@ public class SuiteRunOrchestrator {
     @Transactional
     protected RunEntity createChildRun(SuiteRunEntity sr, ScenarioEntity scenario,
                                        Integer interStepDelayMs, Boolean adaptiveWait) {
-        RunEntity run = new RunEntity(sr.getProductId(), scenario.getId(), sr.getDeviceId(),
+        RunEntity run = new RunEntity(sr.getProductId(), sr.getProjectId(),
+                scenario.getId(), sr.getDeviceId(),
                 sr.getTriggeredByUserId(), sr.getEnvironment());
         run.setScenarioVersion(scenario.getVersion());
         run.setSuiteId(sr.getSuiteId());

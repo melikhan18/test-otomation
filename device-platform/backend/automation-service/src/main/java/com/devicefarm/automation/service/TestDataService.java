@@ -3,6 +3,7 @@ package com.devicefarm.automation.service;
 import com.devicefarm.automation.api.dto.TestDataDtos;
 import com.devicefarm.automation.domain.TestDataEntity;
 import com.devicefarm.automation.domain.TestDataRepository;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.error.ApiException;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
@@ -20,22 +21,22 @@ public class TestDataService {
     public TestDataService(TestDataRepository repo) { this.repo = repo; }
 
     @Transactional
-    public TestDataDtos.View create(JwtPrincipal caller, TestDataDtos.CreateRequest req) {
-        Long pid = requireProduct(caller);
-        if (repo.existsByProductIdAndNameAndEnvironment(pid, req.name(), req.environment())) {
+    public TestDataDtos.View create(JwtPrincipal caller, ProjectContext ctx, TestDataDtos.CreateRequest req) {
+        if (repo.existsByProjectIdAndNameAndEnvironment(ctx.projectId(), req.name(), req.environment())) {
             throw ApiException.conflict("test data with this name + environment already exists");
         }
-        TestDataEntity e = new TestDataEntity(pid, req.name(), req.environment(), req.value(), caller.userId());
+        TestDataEntity e = new TestDataEntity(ctx.legacyProductId(), ctx.projectId(),
+                req.name(), req.environment(), req.value(), caller.userId());
         e.setDescription(req.description());
         e.setSensitive(req.sensitive());
         return toView(repo.save(e), false);
     }
 
     @Transactional
-    public TestDataDtos.View update(JwtPrincipal caller, long id, TestDataDtos.UpdateRequest req) {
-        TestDataEntity e = ensureOwned(caller, id);
+    public TestDataDtos.View update(JwtPrincipal caller, ProjectContext ctx, long id, TestDataDtos.UpdateRequest req) {
+        TestDataEntity e = ensureInProject(ctx, id);
         boolean renamed = !e.getName().equals(req.name()) || !e.getEnvironment().equals(req.environment());
-        if (renamed && repo.existsByProductIdAndNameAndEnvironment(e.getProductId(), req.name(), req.environment())) {
+        if (renamed && repo.existsByProjectIdAndNameAndEnvironment(ctx.projectId(), req.name(), req.environment())) {
             throw ApiException.conflict("test data with this name + environment already exists");
         }
         e.setName(req.name());
@@ -47,44 +48,36 @@ public class TestDataService {
     }
 
     @Transactional
-    public void delete(JwtPrincipal caller, long id) {
-        repo.delete(ensureOwned(caller, id));
+    public void delete(JwtPrincipal caller, ProjectContext ctx, long id) {
+        repo.delete(ensureInProject(ctx, id));
     }
 
     @Transactional(readOnly = true)
-    public TestDataDtos.View get(JwtPrincipal caller, long id, boolean reveal) {
-        TestDataEntity e = ensureOwned(caller, id);
+    public TestDataDtos.View get(JwtPrincipal caller, ProjectContext ctx, long id, boolean reveal) {
+        TestDataEntity e = ensureInProject(ctx, id);
         return toView(e, reveal && caller.isAdmin());
     }
 
     @Transactional(readOnly = true)
-    public List<TestDataDtos.View> list(JwtPrincipal caller, String environment, boolean reveal) {
-        Long pid = requireProduct(caller);
+    public List<TestDataDtos.View> list(JwtPrincipal caller, ProjectContext ctx, String environment, boolean reveal) {
         List<TestDataEntity> raw = (environment == null || environment.isBlank())
-                ? repo.findAllByProductIdOrderByNameAscEnvironmentAsc(pid)
-                : repo.findAllByProductIdAndEnvironmentOrderByNameAsc(pid, environment);
+                ? repo.findAllByProjectIdOrderByNameAscEnvironmentAsc(ctx.projectId())
+                : repo.findAllByProjectIdAndEnvironmentOrderByNameAsc(ctx.projectId(), environment);
         boolean canReveal = reveal && caller.isAdmin();
         return raw.stream().map(e -> toView(e, canReveal)).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<String> environments(JwtPrincipal caller) {
-        Long pid = requireProduct(caller);
-        List<String> envs = repo.findDistinctEnvironments(pid);
+    public List<String> environments(JwtPrincipal caller, ProjectContext ctx) {
+        List<String> envs = repo.findDistinctEnvironments(ctx.projectId());
         if (!envs.contains("default")) envs = new java.util.ArrayList<>(envs) {{ add(0, "default"); }};
         return envs;
     }
 
-    private TestDataEntity ensureOwned(JwtPrincipal caller, long id) {
-        Long pid = requireProduct(caller);
+    private TestDataEntity ensureInProject(ProjectContext ctx, long id) {
         TestDataEntity e = repo.findById(id).orElseThrow(() -> ApiException.notFound("test data"));
-        if (!e.getProductId().equals(pid)) throw ApiException.forbidden("cross-product access");
+        if (!ctx.projectId().equals(e.getProjectId())) throw ApiException.forbidden("test data not in active project");
         return e;
-    }
-
-    private static Long requireProduct(JwtPrincipal caller) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        return caller.productId();
     }
 
     private TestDataDtos.View toView(TestDataEntity e, boolean revealSensitive) {

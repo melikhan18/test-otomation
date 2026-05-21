@@ -14,6 +14,7 @@ public class SuiteRunEntity {
     private Long id;
 
     @Column(name = "product_id", nullable = false) private Long productId;
+    @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(name = "suite_id",   nullable = false) private Long suiteId;
     @Column(name = "suite_name", columnDefinition = "TEXT") private String suiteName;
     @Column(name = "device_id",  nullable = false) private Long deviceId;
@@ -52,9 +53,10 @@ public class SuiteRunEntity {
 
     protected SuiteRunEntity() {}
 
-    public SuiteRunEntity(Long productId, Long suiteId, String suiteName, Long deviceId,
+    public SuiteRunEntity(Long productId, Long projectId, Long suiteId, String suiteName, Long deviceId,
                           Long triggeredByUserId, String environment) {
         this.productId = productId;
+        this.projectId = projectId;
         this.suiteId = suiteId;
         this.suiteName = suiteName;
         this.deviceId = deviceId;
@@ -64,6 +66,7 @@ public class SuiteRunEntity {
 
     public Long getId() { return id; }
     public Long getProductId() { return productId; }
+    public Long getProjectId() { return projectId; }
     public Long getSuiteId() { return suiteId; }
     public String getSuiteName() { return suiteName; }            public void setSuiteName(String v) { this.suiteName = v; }
     public Long getDeviceId() { return deviceId; }

@@ -2,7 +2,10 @@ package com.devicefarm.automation.api;
 
 import com.devicefarm.automation.api.dto.SuiteDtos;
 import com.devicefarm.automation.service.SuiteService;
+import com.devicefarm.automation.tenancy.ProjectContext;
+import com.devicefarm.automation.tenancy.TenancyGuard;
 import com.devicefarm.common.jwt.JwtPrincipal;
+import com.devicefarm.common.tenancy.TenancyHeaders;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,61 +18,79 @@ import java.util.List;
 public class SuiteController {
 
     private final SuiteService service;
+    private final TenancyGuard guard;
 
-    public SuiteController(SuiteService service) { this.service = service; }
-
-    /* ── Suite CRUD ───────────────────────────────────────────────────── */
+    public SuiteController(SuiteService service, TenancyGuard guard) {
+        this.service = service;
+        this.guard = guard;
+    }
 
     @GetMapping
-    public List<SuiteDtos.Summary> list(@AuthenticationPrincipal JwtPrincipal caller) {
-        return service.list(caller);
+    public List<SuiteDtos.Summary> list(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId) {
+        return service.list(caller, guard.requireProject(caller, projectId));
     }
 
     @GetMapping("/{id}")
-    public SuiteDtos.View get(@AuthenticationPrincipal JwtPrincipal caller, @PathVariable long id) {
-        return service.get(caller, id);
+    public SuiteDtos.View get(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id) {
+        return service.get(caller, guard.requireProject(caller, projectId), id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public SuiteDtos.View create(@AuthenticationPrincipal JwtPrincipal caller,
-                                 @RequestBody @Valid SuiteDtos.CreateRequest req) {
-        return service.create(caller, req);
+    public SuiteDtos.View create(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @RequestBody @Valid SuiteDtos.CreateRequest req) {
+        return service.create(caller, guard.requireProject(caller, projectId), req);
     }
 
     @PutMapping("/{id}")
-    public SuiteDtos.View update(@AuthenticationPrincipal JwtPrincipal caller,
-                                 @PathVariable long id,
-                                 @RequestBody @Valid SuiteDtos.UpdateRequest req) {
-        return service.update(caller, id, req);
+    public SuiteDtos.View update(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id,
+            @RequestBody @Valid SuiteDtos.UpdateRequest req) {
+        return service.update(caller, guard.requireProject(caller, projectId), id, req);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@AuthenticationPrincipal JwtPrincipal caller, @PathVariable long id) {
-        service.delete(caller, id);
+    public void delete(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id) {
+        service.delete(caller, guard.requireProject(caller, projectId), id);
     }
 
-    /* ── Scenario membership ─────────────────────────────────────────── */
-
     @PostMapping("/{id}/scenarios")
-    public SuiteDtos.View addScenario(@AuthenticationPrincipal JwtPrincipal caller,
-                                      @PathVariable long id,
-                                      @RequestBody @Valid SuiteDtos.AddScenarioRequest req) {
-        return service.addScenario(caller, id, req);
+    public SuiteDtos.View addScenario(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id,
+            @RequestBody @Valid SuiteDtos.AddScenarioRequest req) {
+        return service.addScenario(caller, guard.requireProject(caller, projectId), id, req);
     }
 
     @DeleteMapping("/{id}/scenarios/{scenarioId}")
-    public SuiteDtos.View removeScenario(@AuthenticationPrincipal JwtPrincipal caller,
-                                         @PathVariable long id,
-                                         @PathVariable long scenarioId) {
-        return service.removeScenario(caller, id, scenarioId);
+    public SuiteDtos.View removeScenario(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id,
+            @PathVariable long scenarioId) {
+        return service.removeScenario(caller, guard.requireProject(caller, projectId), id, scenarioId);
     }
 
     @PutMapping("/{id}/scenarios/reorder")
-    public SuiteDtos.View reorderScenarios(@AuthenticationPrincipal JwtPrincipal caller,
-                                           @PathVariable long id,
-                                           @RequestBody @Valid SuiteDtos.ReorderRequest req) {
-        return service.reorderScenarios(caller, id, req);
+    public SuiteDtos.View reorderScenarios(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id,
+            @RequestBody @Valid SuiteDtos.ReorderRequest req) {
+        return service.reorderScenarios(caller, guard.requireProject(caller, projectId), id, req);
     }
 }

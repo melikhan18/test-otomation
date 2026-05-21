@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderKanban, X } from "lucide-react";
@@ -14,10 +14,34 @@ import {
   scenarioApi, suiteApi, workspaceApi,
   type ScenarioCreate, type SuiteCreate,
 } from "@/lib/automation";
+import { useAuthStore } from "@/store/auth";
 
 export default function WorkspacePage() {
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
+
+  // Drop any ?scenario= / ?suite= selection when the user switches project or
+  // company — the id belongs to the *previous* workspace and would otherwise
+  // surface as "Scenario not found" once the tree refetch returns nothing.
+  const tenancySnapshot = useRef<{ c: number | null; p: number | null }>(
+    { c: activeCompanyId ?? null, p: activeProjectId ?? null },
+  );
+  useEffect(() => {
+    const prev = tenancySnapshot.current;
+    const next = { c: activeCompanyId ?? null, p: activeProjectId ?? null };
+    if (prev.c !== next.c || prev.p !== next.p) {
+      tenancySnapshot.current = next;
+      if (params.get("scenario") || params.get("suite")) {
+        const cleared = new URLSearchParams(params);
+        cleared.delete("scenario");
+        cleared.delete("suite");
+        setParams(cleared, { replace: true });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId, activeProjectId]);
 
   // ── Selection state, mirrored to URL so the view is shareable ──────
   const selection: Selection = (() => {
@@ -41,9 +65,10 @@ export default function WorkspacePage() {
 
   // ── Workspace tree ─────────────────────────────────────────────────
   const treeQ = useQuery({
-    queryKey: ["automation-workspace-tree"],
+    queryKey: ["automation-workspace-tree", activeCompanyId ?? null],
     queryFn: workspaceApi.tree,
     refetchOnWindowFocus: false,
+    enabled: activeCompanyId != null,
   });
 
   function refreshTree() { qc.invalidateQueries({ queryKey: ["automation-workspace-tree"] }); }

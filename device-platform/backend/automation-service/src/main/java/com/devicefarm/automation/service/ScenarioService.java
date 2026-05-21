@@ -2,13 +2,13 @@ package com.devicefarm.automation.service;
 
 import com.devicefarm.automation.api.dto.ScenarioDtos;
 import com.devicefarm.automation.domain.*;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.error.ApiException;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -37,9 +37,9 @@ public class ScenarioService {
     /* ───────────────────────────── Scenario CRUD ──────────────────────────── */
 
     @Transactional
-    public ScenarioDtos.View create(JwtPrincipal caller, ScenarioDtos.CreateRequest req) {
-        Long pid = requireProduct(caller);
-        ScenarioEntity s = new ScenarioEntity(pid, req.name().trim(), caller.userId());
+    public ScenarioDtos.View create(JwtPrincipal caller, ProjectContext ctx, ScenarioDtos.CreateRequest req) {
+        ScenarioEntity s = new ScenarioEntity(ctx.legacyProductId(), ctx.projectId(),
+                req.name().trim(), caller.userId());
         s.setDescription(req.description());
         s.setTags(toArray(req.tags()));
         s.setPreconditions(req.preconditions());
@@ -47,8 +47,8 @@ public class ScenarioService {
     }
 
     @Transactional
-    public ScenarioDtos.View update(JwtPrincipal caller, long id, ScenarioDtos.UpdateRequest req) {
-        ScenarioEntity s = ensureOwned(caller, id);
+    public ScenarioDtos.View update(JwtPrincipal caller, ProjectContext ctx, long id, ScenarioDtos.UpdateRequest req) {
+        ScenarioEntity s = ensureInProject(ctx, id);
         s.setName(req.name().trim());
         s.setDescription(req.description());
         s.setTags(toArray(req.tags()));
@@ -57,22 +57,21 @@ public class ScenarioService {
     }
 
     @Transactional
-    public void delete(JwtPrincipal caller, long id) {
-        ScenarioEntity s = ensureOwned(caller, id);
+    public void delete(JwtPrincipal caller, ProjectContext ctx, long id) {
+        ScenarioEntity s = ensureInProject(ctx, id);
         steps.deleteAllByScenarioId(s.getId());
         suiteScenarios.deleteAllByScenarioId(s.getId());
         scenarios.delete(s);
     }
 
     @Transactional(readOnly = true)
-    public ScenarioDtos.View get(JwtPrincipal caller, long id) {
-        return toFullView(ensureOwned(caller, id));
+    public ScenarioDtos.View get(JwtPrincipal caller, ProjectContext ctx, long id) {
+        return toFullView(ensureInProject(ctx, id));
     }
 
     @Transactional(readOnly = true)
-    public List<ScenarioDtos.Summary> list(JwtPrincipal caller) {
-        Long pid = requireProduct(caller);
-        List<ScenarioEntity> raw = scenarios.findAllByProductIdOrderByUpdatedAtDesc(pid);
+    public List<ScenarioDtos.Summary> list(JwtPrincipal caller, ProjectContext ctx) {
+        List<ScenarioEntity> raw = scenarios.findAllByProjectIdOrderByUpdatedAtDesc(ctx.projectId());
         return raw.stream().map(s ->
             new ScenarioDtos.Summary(
                 s.getId(), s.getProductId(), s.getName(), s.getDescription(),
@@ -86,15 +85,14 @@ public class ScenarioService {
     /* ─────────────────────────────── Step ops ─────────────────────────────── */
 
     @Transactional
-    public ScenarioDtos.View addStep(JwtPrincipal caller, long scenarioId, ScenarioDtos.StepCreateRequest req) {
-        ScenarioEntity sc = ensureOwned(caller, scenarioId);
-        validateRefs(caller.productId(), req.targetElementId(), req.dataId());
+    public ScenarioDtos.View addStep(JwtPrincipal caller, ProjectContext ctx, long scenarioId, ScenarioDtos.StepCreateRequest req) {
+        ScenarioEntity sc = ensureInProject(ctx, scenarioId);
+        validateRefs(ctx, req.targetElementId(), req.dataId());
         StepValidator.validate(req.action(), req.targetElementId(), req.dataId(), req.literalValue());
 
         List<StepEntity> existing = steps.findAllByScenarioIdOrderByOrderIndexAsc(sc.getId());
         int insertAt = req.position() != null ? Math.max(0, Math.min(req.position(), existing.size())) : existing.size();
 
-        // Shift everything from insertAt onward by +1
         for (int i = insertAt; i < existing.size(); i++) {
             StepEntity st = existing.get(i);
             st.setOrderIndex(st.getOrderIndex() + 1);
@@ -110,16 +108,15 @@ public class ScenarioService {
         if (req.screenshotAfter() != null)  step.setScreenshotAfter(req.screenshotAfter());
         steps.save(step);
 
-        // touch parent so version increments
         scenarios.save(sc);
         return toFullView(sc);
     }
 
     @Transactional
-    public ScenarioDtos.View updateStep(JwtPrincipal caller, long scenarioId, long stepId, ScenarioDtos.StepUpdateRequest req) {
-        ScenarioEntity sc = ensureOwned(caller, scenarioId);
+    public ScenarioDtos.View updateStep(JwtPrincipal caller, ProjectContext ctx, long scenarioId, long stepId, ScenarioDtos.StepUpdateRequest req) {
+        ScenarioEntity sc = ensureInProject(ctx, scenarioId);
         StepEntity st = ensureStep(sc, stepId);
-        validateRefs(caller.productId(), req.targetElementId(), req.dataId());
+        validateRefs(ctx, req.targetElementId(), req.dataId());
         StepValidator.validate(req.action(), req.targetElementId(), req.dataId(), req.literalValue());
 
         st.setAction(req.action());
@@ -140,13 +137,12 @@ public class ScenarioService {
     }
 
     @Transactional
-    public ScenarioDtos.View deleteStep(JwtPrincipal caller, long scenarioId, long stepId) {
-        ScenarioEntity sc = ensureOwned(caller, scenarioId);
+    public ScenarioDtos.View deleteStep(JwtPrincipal caller, ProjectContext ctx, long scenarioId, long stepId) {
+        ScenarioEntity sc = ensureInProject(ctx, scenarioId);
         StepEntity st = ensureStep(sc, stepId);
         int removed = st.getOrderIndex();
         steps.delete(st);
 
-        // Compact remaining order indices
         List<StepEntity> remaining = steps.findAllByScenarioIdOrderByOrderIndexAsc(sc.getId());
         for (StepEntity s : remaining) {
             if (s.getOrderIndex() > removed) s.setOrderIndex(s.getOrderIndex() - 1);
@@ -156,10 +152,9 @@ public class ScenarioService {
         return toFullView(sc);
     }
 
-    /** Replace step order using the supplied list. Must contain ALL step ids of the scenario. */
     @Transactional
-    public ScenarioDtos.View reorderSteps(JwtPrincipal caller, long scenarioId, ScenarioDtos.ReorderRequest req) {
-        ScenarioEntity sc = ensureOwned(caller, scenarioId);
+    public ScenarioDtos.View reorderSteps(JwtPrincipal caller, ProjectContext ctx, long scenarioId, ScenarioDtos.ReorderRequest req) {
+        ScenarioEntity sc = ensureInProject(ctx, scenarioId);
         List<StepEntity> existing = steps.findAllByScenarioIdOrderByOrderIndexAsc(sc.getId());
         if (existing.size() != req.stepIds().size()) {
             throw ApiException.badRequest("step id list size mismatch (expected " + existing.size() + ", got " + req.stepIds().size() + ")");
@@ -176,21 +171,20 @@ public class ScenarioService {
 
     /* ───────────────────────────── helpers ────────────────────────────────── */
 
-    private void validateRefs(Long productId, Long elementId, Long dataId) {
+    private void validateRefs(ProjectContext ctx, Long elementId, Long dataId) {
         if (elementId != null) {
             ElementEntity el = elements.findById(elementId).orElseThrow(() -> ApiException.notFound("element"));
-            if (!el.getProductId().equals(productId)) throw ApiException.forbidden("cross-product element");
+            if (!ctx.projectId().equals(el.getProjectId())) throw ApiException.forbidden("cross-project element");
         }
         if (dataId != null) {
             TestDataEntity td = data.findById(dataId).orElseThrow(() -> ApiException.notFound("test data"));
-            if (!td.getProductId().equals(productId)) throw ApiException.forbidden("cross-product test data");
+            if (!ctx.projectId().equals(td.getProjectId())) throw ApiException.forbidden("cross-project test data");
         }
     }
 
-    private ScenarioEntity ensureOwned(JwtPrincipal caller, long id) {
-        Long pid = requireProduct(caller);
+    private ScenarioEntity ensureInProject(ProjectContext ctx, long id) {
         ScenarioEntity s = scenarios.findById(id).orElseThrow(() -> ApiException.notFound("scenario"));
-        if (!s.getProductId().equals(pid)) throw ApiException.forbidden("cross-product access");
+        if (!ctx.projectId().equals(s.getProjectId())) throw ApiException.forbidden("scenario not in active project");
         return s;
     }
 
@@ -198,11 +192,6 @@ public class ScenarioService {
         StepEntity st = steps.findById(stepId).orElseThrow(() -> ApiException.notFound("step"));
         if (!st.getScenarioId().equals(sc.getId())) throw ApiException.badRequest("step belongs to a different scenario");
         return st;
-    }
-
-    private static Long requireProduct(JwtPrincipal caller) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        return caller.productId();
     }
 
     private static String[] toArray(List<String> tags) {
@@ -215,7 +204,6 @@ public class ScenarioService {
     private ScenarioDtos.View toFullView(ScenarioEntity sc) {
         List<StepEntity> raw = steps.findAllByScenarioIdOrderByOrderIndexAsc(sc.getId());
 
-        // Pre-fetch referenced elements + data so each step view is built without N+1.
         List<Long> elementIds = raw.stream().map(StepEntity::getTargetElementId).filter(java.util.Objects::nonNull).toList();
         List<Long> dataIds    = raw.stream().map(StepEntity::getDataId).filter(java.util.Objects::nonNull).toList();
         Map<Long, ElementEntity>  eMap = elementIds.isEmpty() ? Map.of()
@@ -244,8 +232,6 @@ public class ScenarioService {
             ));
         }
 
-        // Reverse-link: every suite this scenario currently belongs to. Used by the UI to
-        // warn about the blast radius of an edit / delete.
         List<SuiteScenarioEntity> parentLinks = suiteScenarios.findAllByScenarioId(sc.getId());
         List<Long> parentIds = parentLinks.stream().map(SuiteScenarioEntity::getSuiteId).toList();
         Map<Long, SuiteEntity> parentSuiteMap = parentIds.isEmpty() ? Map.of()
@@ -259,7 +245,6 @@ public class ScenarioService {
                     suite.getId(), suite.getName(), List.of(suite.getTags())
             ));
         }
-        // Stable order by suite name for predictable UI rendering
         parentRefs.sort((a, b) -> a.name().compareToIgnoreCase(b.name()));
 
         return new ScenarioDtos.View(

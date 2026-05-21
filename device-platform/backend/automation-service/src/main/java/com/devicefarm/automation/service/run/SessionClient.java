@@ -1,6 +1,7 @@
 package com.devicefarm.automation.service.run;
 
 import com.devicefarm.common.error.ApiException;
+import com.devicefarm.common.tenancy.TenancyHeaders;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -27,11 +28,17 @@ public class SessionClient {
                 .build();
     }
 
-    public Reservation reserve(long deviceId, String userJwt) {
+    public Reservation reserve(long deviceId, String userJwt, Long companyId, Long projectId) {
         try {
+            // Forward the tenancy context as headers so session-service can validate
+            // device-vs-company and (optionally) device-vs-project access policy.
             JsonNode body = http.post()
                     .uri("/api/sessions")
-                    .header("Authorization", "Bearer " + userJwt)
+                    .headers(h -> {
+                        h.setBearerAuth(userJwt);
+                        if (companyId != null) h.set(TenancyHeaders.COMPANY_ID, companyId.toString());
+                        if (projectId != null) h.set(TenancyHeaders.PROJECT_ID, projectId.toString());
+                    })
                     .body(Map.of("deviceId", deviceId))
                     .retrieve()
                     .body(JsonNode.class);

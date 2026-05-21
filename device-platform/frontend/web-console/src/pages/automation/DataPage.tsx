@@ -15,7 +15,7 @@ import {
 } from "@/lib/automation";
 
 export default function DataPage() {
-  const role = useAuthStore((s) => s.role);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [environment, setEnvironment] = useState<string>("all");
@@ -26,14 +26,16 @@ export default function DataPage() {
   const [confirmDelete, setConfirmDelete] = useState<TestDataView | null>(null);
 
   const envsQ = useQuery({
-    queryKey: ["automation-test-data-envs"],
+    queryKey: ["automation-test-data-envs", activeCompanyId ?? null],
     queryFn: testDataApi.environments,
+    enabled: activeCompanyId != null,
   });
 
   const dataQ = useQuery({
-    queryKey: ["automation-test-data", environment, reveal],
+    queryKey: ["automation-test-data", activeCompanyId ?? null, environment, reveal],
     queryFn: () => testDataApi.list(environment === "all" ? undefined : environment, reveal),
     refetchOnWindowFocus: false,
+    enabled: activeCompanyId != null,
   });
 
   const create = useMutation({
@@ -94,21 +96,19 @@ export default function DataPage() {
               )}
             </div>
 
-            {role === "ADMIN" && (
-              <button
-                onClick={() => setReveal(!reveal)}
-                className={cn(
-                  "inline-flex items-center gap-2 h-9 px-3 rounded-md border text-xs font-medium transition-colors",
-                  reveal
-                    ? "border-warning-500/40 bg-warning-500/10 text-warning-500"
-                    : "border-surface-border bg-surface hover:bg-surface-muted text-ink-secondary hover:text-ink-primary",
-                )}
-                title="Reveal sensitive values (admin only)"
-              >
-                {reveal ? <Eye size={13} /> : <EyeOff size={13} />}
-                {reveal ? "Sensitive shown" : "Sensitive masked"}
-              </button>
-            )}
+            <button
+              onClick={() => setReveal(!reveal)}
+              className={cn(
+                "inline-flex items-center gap-2 h-9 px-3 rounded-md border text-xs font-medium transition-colors",
+                reveal
+                  ? "border-warning-500/40 bg-warning-500/10 text-warning-500"
+                  : "border-surface-border bg-surface hover:bg-surface-muted text-ink-secondary hover:text-ink-primary",
+              )}
+              title="Reveal sensitive values"
+            >
+              {reveal ? <Eye size={13} /> : <EyeOff size={13} />}
+              {reveal ? "Sensitive shown" : "Sensitive masked"}
+            </button>
           </div>
 
           <div className="flex items-center gap-1 flex-wrap">

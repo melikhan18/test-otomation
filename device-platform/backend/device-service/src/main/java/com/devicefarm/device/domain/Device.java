@@ -14,6 +14,13 @@ public class Device {
     @Column(name = "product_id", nullable = false)
     private Long productId;
 
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
+
+    /** When true, only projects listed in device_project_access can see/use this device. */
+    @Column(nullable = false)
+    private boolean restricted = false;
+
     @Column(nullable = false, length = 128)
     private String serial;
 
@@ -43,9 +50,10 @@ public class Device {
 
     protected Device() {}
 
-    public Device(Long productId, String serial, String manufacturer, String model,
+    public Device(Long productId, Long companyId, String serial, String manufacturer, String model,
                   String androidVersion, int screenWidth, int screenHeight, String agentVersion) {
         this.productId = productId;
+        this.companyId = companyId;
         this.serial = serial;
         this.manufacturer = manufacturer;
         this.model = model;
@@ -57,6 +65,10 @@ public class Device {
 
     public Long getId() { return id; }
     public Long getProductId() { return productId; }
+    public Long getCompanyId() { return companyId; }
+    public void setCompanyId(Long v) { this.companyId = v; }
+    public boolean isRestricted() { return restricted; }
+    public void setRestricted(boolean v) { this.restricted = v; }
     public String getSerial() { return serial; }
     public String getManufacturer() { return manufacturer; }
     public String getModel() { return model; }

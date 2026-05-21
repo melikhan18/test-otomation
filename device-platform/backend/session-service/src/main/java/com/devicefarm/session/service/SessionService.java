@@ -17,16 +17,44 @@ public class SessionService {
     private final SessionRepository sessions;
     private final SessionLockService locks;
     private final JwtTokenService jwt;
+    private final DeviceLookup devices;
 
-    public SessionService(SessionRepository sessions, SessionLockService locks, JwtTokenService jwt) {
+    public SessionService(SessionRepository sessions, SessionLockService locks, JwtTokenService jwt,
+                          DeviceLookup devices) {
         this.sessions = sessions;
         this.locks = locks;
         this.jwt = jwt;
+        this.devices = devices;
     }
 
+    /**
+     * Reserve a device. Tenancy guard verifies the caller belongs to the device's
+     * company; if an active project is supplied and the device is restricted, the
+     * project must be on its access whitelist. Anyone who slips past those checks
+     * would be bypassing the device-service visibility filter — so we re-check here.
+     */
     @Transactional
-    public SessionDtos.SessionView create(JwtPrincipal caller, long deviceId) {
+    public SessionDtos.SessionView create(JwtPrincipal caller, long deviceId, Long companyId, Long projectId) {
         if (caller == null || !caller.isUser()) throw ApiException.forbidden("user required");
+
+        DeviceLookup.Info info = devices.find(deviceId)
+                .orElseThrow(() -> ApiException.notFound("device"));
+        Long deviceCompanyId = info.companyId();
+        if (!caller.platformAdmin()) {
+            if (deviceCompanyId == null) {
+                throw ApiException.forbidden("device has no company assignment");
+            }
+            if (!caller.isMemberOf(deviceCompanyId)) {
+                throw ApiException.forbidden("not a member of this device's company");
+            }
+            if (companyId != null && !companyId.equals(deviceCompanyId)) {
+                throw ApiException.badRequest("device not in active company");
+            }
+            if (info.restricted() && projectId != null
+                    && !devices.projectAccess(deviceId).contains(projectId)) {
+                throw ApiException.forbidden("device not granted to active project");
+            }
+        }
 
         // Reserve a placeholder Session row first so we have an id for the lock value.
         Session s = sessions.save(new Session(deviceId, caller.userId(), caller.productId()));

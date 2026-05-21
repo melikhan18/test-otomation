@@ -12,6 +12,7 @@ public class TestDataEntity {
     private Long id;
 
     @Column(name = "product_id", nullable = false) private Long productId;
+    @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(nullable = false, length = 160)         private String name;
     @Column(nullable = false, length = 32)          private String environment = "default";
     @Column(nullable = false, columnDefinition = "TEXT") private String value;
@@ -24,8 +25,9 @@ public class TestDataEntity {
 
     protected TestDataEntity() {}
 
-    public TestDataEntity(Long productId, String name, String environment, String value, Long createdByUserId) {
+    public TestDataEntity(Long productId, Long projectId, String name, String environment, String value, Long createdByUserId) {
         this.productId = productId;
+        this.projectId = projectId;
         this.name = name;
         this.environment = environment;
         this.value = value;
@@ -36,6 +38,7 @@ public class TestDataEntity {
 
     public Long getId() { return id; }
     public Long getProductId() { return productId; }
+    public Long getProjectId() { return projectId; }
     public String getName() { return name; }                public void setName(String v) { this.name = v; }
     public String getEnvironment() { return environment; }  public void setEnvironment(String v) { this.environment = v; }
     public String getValue() { return value; }              public void setValue(String v) { this.value = v; }

@@ -2,7 +2,9 @@ package com.devicefarm.automation.api;
 
 import com.devicefarm.automation.api.dto.ElementDtos;
 import com.devicefarm.automation.service.ElementService;
+import com.devicefarm.automation.tenancy.TenancyGuard;
 import com.devicefarm.common.jwt.JwtPrincipal;
+import com.devicefarm.common.tenancy.TenancyHeaders;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -15,37 +17,53 @@ import java.util.List;
 public class ElementController {
 
     private final ElementService service;
+    private final TenancyGuard guard;
 
-    public ElementController(ElementService service) { this.service = service; }
+    public ElementController(ElementService service, TenancyGuard guard) {
+        this.service = service;
+        this.guard = guard;
+    }
 
     @GetMapping
-    public List<ElementDtos.View> list(@AuthenticationPrincipal JwtPrincipal caller,
-                                       @RequestParam(value = "q", required = false) String q) {
-        return service.list(caller, q);
+    public List<ElementDtos.View> list(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @RequestParam(value = "q", required = false) String q) {
+        return service.list(caller, guard.requireProject(caller, projectId), q);
     }
 
     @GetMapping("/{id}")
-    public ElementDtos.View get(@AuthenticationPrincipal JwtPrincipal caller, @PathVariable long id) {
-        return service.get(caller, id);
+    public ElementDtos.View get(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id) {
+        return service.get(caller, guard.requireProject(caller, projectId), id);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public ElementDtos.View create(@AuthenticationPrincipal JwtPrincipal caller,
-                                   @RequestBody @Valid ElementDtos.CreateRequest req) {
-        return service.create(caller, req);
+    public ElementDtos.View create(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @RequestBody @Valid ElementDtos.CreateRequest req) {
+        return service.create(caller, guard.requireProject(caller, projectId), req);
     }
 
     @PutMapping("/{id}")
-    public ElementDtos.View update(@AuthenticationPrincipal JwtPrincipal caller,
-                                   @PathVariable long id,
-                                   @RequestBody @Valid ElementDtos.UpdateRequest req) {
-        return service.update(caller, id, req);
+    public ElementDtos.View update(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id,
+            @RequestBody @Valid ElementDtos.UpdateRequest req) {
+        return service.update(caller, guard.requireProject(caller, projectId), id, req);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@AuthenticationPrincipal JwtPrincipal caller, @PathVariable long id) {
-        service.delete(caller, id);
+    public void delete(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID) long projectId,
+            @PathVariable long id) {
+        service.delete(caller, guard.requireProject(caller, projectId), id);
     }
 }

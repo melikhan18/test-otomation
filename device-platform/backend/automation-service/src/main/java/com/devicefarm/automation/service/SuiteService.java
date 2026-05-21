@@ -2,6 +2,7 @@ package com.devicefarm.automation.service;
 
 import com.devicefarm.automation.api.dto.SuiteDtos;
 import com.devicefarm.automation.domain.*;
+import com.devicefarm.automation.tenancy.ProjectContext;
 import com.devicefarm.common.error.ApiException;
 import com.devicefarm.common.jwt.JwtPrincipal;
 import org.springframework.stereotype.Service;
@@ -29,20 +30,18 @@ public class SuiteService {
         this.steps = steps;
     }
 
-    /* ─────────────────────────── Suite CRUD ───────────────────────────── */
-
     @Transactional
-    public SuiteDtos.View create(JwtPrincipal caller, SuiteDtos.CreateRequest req) {
-        Long pid = requireProduct(caller);
-        SuiteEntity s = new SuiteEntity(pid, req.name().trim(), caller.userId());
+    public SuiteDtos.View create(JwtPrincipal caller, ProjectContext ctx, SuiteDtos.CreateRequest req) {
+        SuiteEntity s = new SuiteEntity(ctx.legacyProductId(), ctx.projectId(),
+                req.name().trim(), caller.userId());
         s.setDescription(req.description());
         s.setTags(toArray(req.tags()));
         return toView(suites.save(s));
     }
 
     @Transactional
-    public SuiteDtos.View update(JwtPrincipal caller, long id, SuiteDtos.UpdateRequest req) {
-        SuiteEntity s = ensureOwned(caller, id);
+    public SuiteDtos.View update(JwtPrincipal caller, ProjectContext ctx, long id, SuiteDtos.UpdateRequest req) {
+        SuiteEntity s = ensureInProject(ctx, id);
         s.setName(req.name().trim());
         s.setDescription(req.description());
         s.setTags(toArray(req.tags()));
@@ -50,40 +49,36 @@ public class SuiteService {
     }
 
     @Transactional
-    public void delete(JwtPrincipal caller, long id) {
-        SuiteEntity s = ensureOwned(caller, id);
+    public void delete(JwtPrincipal caller, ProjectContext ctx, long id) {
+        SuiteEntity s = ensureInProject(ctx, id);
         links.deleteAllBySuiteId(s.getId());
         suites.delete(s);
     }
 
     @Transactional(readOnly = true)
-    public SuiteDtos.View get(JwtPrincipal caller, long id) {
-        return toView(ensureOwned(caller, id));
+    public SuiteDtos.View get(JwtPrincipal caller, ProjectContext ctx, long id) {
+        return toView(ensureInProject(ctx, id));
     }
 
     @Transactional(readOnly = true)
-    public List<SuiteDtos.Summary> list(JwtPrincipal caller) {
-        Long pid = requireProduct(caller);
-        List<SuiteEntity> raw = suites.findAllByProductIdOrderByUpdatedAtDesc(pid);
-        return raw.stream().map(s -> new SuiteDtos.Summary(
-                s.getId(), s.getProductId(), s.getName(), s.getDescription(),
-                List.of(s.getTags()),
-                (int) links.countBySuiteId(s.getId()),
-                s.getCreatedAt(), s.getUpdatedAt()
-        )).toList();
+    public List<SuiteDtos.Summary> list(JwtPrincipal caller, ProjectContext ctx) {
+        return suites.findAllByProjectIdOrderByUpdatedAtDesc(ctx.projectId()).stream()
+                .map(s -> new SuiteDtos.Summary(
+                        s.getId(), s.getProductId(), s.getName(), s.getDescription(),
+                        List.of(s.getTags()),
+                        (int) links.countBySuiteId(s.getId()),
+                        s.getCreatedAt(), s.getUpdatedAt()
+                )).toList();
     }
 
-    /* ──────────────────────── Scenario membership ─────────────────────── */
-
     @Transactional
-    public SuiteDtos.View addScenario(JwtPrincipal caller, long suiteId, SuiteDtos.AddScenarioRequest req) {
-        SuiteEntity suite = ensureOwned(caller, suiteId);
+    public SuiteDtos.View addScenario(JwtPrincipal caller, ProjectContext ctx, long suiteId, SuiteDtos.AddScenarioRequest req) {
+        SuiteEntity suite = ensureInProject(ctx, suiteId);
         ScenarioEntity sc = scenarios.findById(req.scenarioId())
                 .orElseThrow(() -> ApiException.notFound("scenario"));
-        if (!sc.getProductId().equals(suite.getProductId())) {
-            throw ApiException.forbidden("cross-product scenario");
+        if (!ctx.projectId().equals(sc.getProjectId())) {
+            throw ApiException.forbidden("scenario not in active project");
         }
-        // Idempotent: skip if already present.
         var existing = links.findAllBySuiteIdOrderByOrderIndexAsc(suite.getId());
         for (SuiteScenarioEntity link : existing) {
             if (link.getScenarioId().equals(sc.getId())) return toView(suite);
@@ -94,8 +89,8 @@ public class SuiteService {
     }
 
     @Transactional
-    public SuiteDtos.View removeScenario(JwtPrincipal caller, long suiteId, long scenarioId) {
-        SuiteEntity suite = ensureOwned(caller, suiteId);
+    public SuiteDtos.View removeScenario(JwtPrincipal caller, ProjectContext ctx, long suiteId, long scenarioId) {
+        SuiteEntity suite = ensureInProject(ctx, suiteId);
         var existing = links.findAllBySuiteIdOrderByOrderIndexAsc(suite.getId());
         SuiteScenarioEntity target = null;
         for (SuiteScenarioEntity link : existing) {
@@ -114,11 +109,11 @@ public class SuiteService {
     }
 
     @Transactional
-    public SuiteDtos.View reorderScenarios(JwtPrincipal caller, long suiteId, SuiteDtos.ReorderRequest req) {
-        SuiteEntity suite = ensureOwned(caller, suiteId);
+    public SuiteDtos.View reorderScenarios(JwtPrincipal caller, ProjectContext ctx, long suiteId, SuiteDtos.ReorderRequest req) {
+        SuiteEntity suite = ensureInProject(ctx, suiteId);
         var existing = links.findAllBySuiteIdOrderByOrderIndexAsc(suite.getId());
         if (existing.size() != req.scenarioIds().size()) {
-            throw ApiException.badRequest("scenario id list size mismatch (expected " + existing.size() + ", got " + req.scenarioIds().size() + ")");
+            throw ApiException.badRequest("scenario id list size mismatch");
         }
         Map<Long, SuiteScenarioEntity> byId = existing.stream()
                 .collect(Collectors.toMap(SuiteScenarioEntity::getScenarioId, x -> x));
@@ -131,18 +126,10 @@ public class SuiteService {
         return toView(suite);
     }
 
-    /* ───────────────────────────── helpers ────────────────────────────── */
-
-    private SuiteEntity ensureOwned(JwtPrincipal caller, long id) {
-        Long pid = requireProduct(caller);
+    private SuiteEntity ensureInProject(ProjectContext ctx, long id) {
         SuiteEntity s = suites.findById(id).orElseThrow(() -> ApiException.notFound("suite"));
-        if (!s.getProductId().equals(pid)) throw ApiException.forbidden("cross-product access");
+        if (!ctx.projectId().equals(s.getProjectId())) throw ApiException.forbidden("suite not in active project");
         return s;
-    }
-
-    private static Long requireProduct(JwtPrincipal caller) {
-        if (caller == null || caller.productId() == null) throw ApiException.unauthorized("missing identity");
-        return caller.productId();
     }
 
     private static String[] toArray(List<String> tags) {
@@ -153,8 +140,6 @@ public class SuiteService {
     private SuiteDtos.View toView(SuiteEntity suite) {
         var existing = links.findAllBySuiteIdOrderByOrderIndexAsc(suite.getId());
         List<Long> scenarioIds = existing.stream().map(SuiteScenarioEntity::getScenarioId).toList();
-
-        // Bulk-fetch scenarios + their step counts.
         Map<Long, ScenarioEntity> scMap = scenarioIds.isEmpty() ? Map.of()
                 : scenarios.findAllById(scenarioIds).stream()
                     .collect(Collectors.toMap(ScenarioEntity::getId, x -> x));
@@ -164,14 +149,13 @@ public class SuiteService {
         List<SuiteDtos.ScenarioRef> refs = new ArrayList<>(existing.size());
         for (SuiteScenarioEntity link : existing) {
             ScenarioEntity sc = scMap.get(link.getScenarioId());
-            if (sc == null) continue; // orphan link (shouldn't happen)
+            if (sc == null) continue;
             refs.add(new SuiteDtos.ScenarioRef(
                     sc.getId(), sc.getName(), sc.getDescription(), List.of(sc.getTags()),
                     stepCounts.getOrDefault(sc.getId(), 0),
                     link.getOrderIndex()
             ));
         }
-
         return new SuiteDtos.View(
                 suite.getId(), suite.getProductId(), suite.getName(), suite.getDescription(),
                 List.of(suite.getTags()),

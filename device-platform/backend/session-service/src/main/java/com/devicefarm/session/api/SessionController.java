@@ -1,6 +1,7 @@
 package com.devicefarm.session.api;
 
 import com.devicefarm.common.jwt.JwtPrincipal;
+import com.devicefarm.common.tenancy.TenancyHeaders;
 import com.devicefarm.session.api.dto.SessionDtos;
 import com.devicefarm.session.service.SessionService;
 import jakarta.validation.Valid;
@@ -20,9 +21,12 @@ public class SessionController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public SessionDtos.SessionView create(@AuthenticationPrincipal JwtPrincipal caller,
-                                          @RequestBody @Valid SessionDtos.CreateSessionRequest req) {
-        return service.create(caller, req.deviceId());
+    public SessionDtos.SessionView create(
+            @AuthenticationPrincipal JwtPrincipal caller,
+            @RequestHeader(name = TenancyHeaders.COMPANY_ID, required = false) Long companyId,
+            @RequestHeader(name = TenancyHeaders.PROJECT_ID, required = false) Long projectId,
+            @RequestBody @Valid SessionDtos.CreateSessionRequest req) {
+        return service.create(caller, req.deviceId(), companyId, projectId);
     }
 
     @GetMapping("/{id}")

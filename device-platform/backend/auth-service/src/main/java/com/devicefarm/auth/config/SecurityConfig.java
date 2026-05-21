@@ -29,8 +29,11 @@ public class SecurityConfig {
             .cors(c -> {})
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
-                .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/signup").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                // SSE stream auths via ?access_token= query param (EventSource cannot
+                // send custom headers). Auth happens inside the controller.
+                .requestMatchers(HttpMethod.GET, "/api/notifications/stream").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwt, UsernamePasswordAuthenticationFilter.class);

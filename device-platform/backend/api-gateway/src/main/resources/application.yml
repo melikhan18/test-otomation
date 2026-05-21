@@ -19,6 +19,19 @@ spring:
           uri: ${SVC_AUTH:http://localhost:8081}
           predicates:
             - Path=/api/auth/**
+        # Tenancy management endpoints live in auth-service.
+        - id: companies
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/companies/**
+        - id: notifications
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/notifications/**
+        - id: admin-users
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/admin/**
         - id: devices
           uri: ${SVC_DEVICE:http://localhost:8082}
           predicates:
