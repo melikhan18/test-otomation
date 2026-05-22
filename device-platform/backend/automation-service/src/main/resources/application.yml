@@ -23,8 +23,10 @@ spring:
     locations: classpath:db/migration
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 10MB
+      # APK upload'ları için yüksek tutuluyor. Büyük oyun APK'ları + Faz 4 sonrası AAB / split
+      # APK ihtimaline karşı 500MB. Request limit dosya + form alanları için biraz daha geniş.
+      max-file-size: 500MB
+      max-request-size: 510MB
 
 app:
   jwt:
@@ -45,6 +47,7 @@ app:
     region:      us-east-1
     screenshots-bucket: screenshots
     videos-bucket:      videos
+    apks-bucket:        apks
   retention:
     enabled: ${RETENTION_ENABLED:true}
     days:    ${RETENTION_DAYS:30}

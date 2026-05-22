@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { deviceApi } from "@/lib/devices";
 import { suiteRunApi, testDataApi, type SuiteRunCreate } from "@/lib/automation";
+import TargetAppPicker from "@/components/automation/TargetAppPicker";
 
 type Props = {
   suiteId: number;
@@ -30,6 +31,10 @@ export default function SuiteRunDialog({ suiteId, suiteName, scenarioCount, onCl
   const [environment, setEnvironment] = useState<string>("default");
   const [interStepDelayMs, setInterStepDelayMs] = useState<number>(500);
   const [adaptiveWait, setAdaptiveWait] = useState<boolean>(false);
+  // Faz 4: same APK + reset config applies to every child run in the suite.
+  const [targetAppVersionId, setTargetAppVersionId] = useState<number | null>(null);
+  const [resetHomeAfter, setResetHomeAfter] = useState<boolean>(true);
+  const [killProcessAfter, setKillProcessAfter] = useState<boolean>(false);
 
   const onlineDevices = useMemo(
     () => (devicesQ.data ?? []).filter((d) => d.status === "ONLINE"),
@@ -118,6 +123,15 @@ export default function SuiteRunDialog({ suiteId, suiteName, scenarioCount, onCl
             )}
           </div>
 
+          <TargetAppPicker
+            versionId={targetAppVersionId}
+            onVersionChange={setTargetAppVersionId}
+            resetHomeAfter={resetHomeAfter}
+            onResetHomeAfterChange={setResetHomeAfter}
+            killProcessAfter={killProcessAfter}
+            onKillProcessAfterChange={setKillProcessAfter}
+          />
+
           <div>
             <span className="label block mb-1.5">Environment</span>
             <div className="flex flex-wrap gap-1.5">
@@ -203,7 +217,10 @@ export default function SuiteRunDialog({ suiteId, suiteName, scenarioCount, onCl
             leftIcon={<Play size={12} />}
             disabled={!deviceId || scenarioCount === 0}
             loading={create.isPending}
-            onClick={() => deviceId && create.mutate({ suiteId, deviceId, environment, interStepDelayMs, adaptiveWait })}
+            onClick={() => deviceId && create.mutate({
+              suiteId, deviceId, environment, interStepDelayMs, adaptiveWait,
+              targetAppVersionId, resetHomeAfter, killProcessAfter,
+            })}
           >
             Run {scenarioCount} scenario{scenarioCount === 1 ? "" : "s"}
           </Button>

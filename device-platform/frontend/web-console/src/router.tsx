@@ -13,6 +13,7 @@ import DevicesPage from "@/pages/DevicesPage";
 import SessionPage from "@/pages/SessionPage";
 import ElementsPage from "@/pages/automation/ElementsPage";
 import DataPage from "@/pages/automation/DataPage";
+import AppsPage from "@/pages/automation/AppsPage";
 import WorkspacePage from "@/pages/automation/WorkspacePage";
 import RunDetailPage from "@/pages/automation/RunDetailPage";
 import SuiteRunDetailPage from "@/pages/automation/SuiteRunDetailPage";
@@ -116,6 +117,7 @@ export const router = createBrowserRouter([
           { path: "/automation/workspace",      element: <WorkspacePage /> },
           { path: "/automation/elements",       element: <ElementsPage /> },
           { path: "/automation/data",           element: <DataPage /> },
+          { path: "/automation/apps",           element: <AppsPage /> },
           // Reports is the unified hub — suite runs, all runs, scenarios tabs live here.
           { path: "/automation/reports",                element: <ReportsPage /> },
           // Legacy path: /automation/runs?... preserves scenario filter when redirecting.

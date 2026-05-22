@@ -9,6 +9,8 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+import java.io.File;
+
 /**
  * Thin wrapper around the S3 client. The two upload methods exist mainly so callers
  * don't repeat bucket-name plumbing; the returned URL is browser-reachable.
@@ -34,6 +36,40 @@ public class ObjectStorage {
     /** Upload an MP4 video (used by Faz H). */
     public String uploadVideo(String key, byte[] data) {
         return put(props.getVideosBucket(), key, data, "video/mp4");
+    }
+
+    /**
+     * Upload an APK file. Takes a {@link File} (rather than {@code byte[]}) so callers
+     * can stream large uploads (50–250 MB is common) directly from disk without
+     * loading the whole binary into the heap.
+     */
+    public String uploadApk(String key, File file) {
+        s3.putObject(
+                PutObjectRequest.builder()
+                        .bucket(props.getApksBucket())
+                        .key(key)
+                        .contentType("application/vnd.android.package-archive")
+                        .build(),
+                RequestBody.fromFile(file));
+        String url = publicUrl(props.getApksBucket(), key);
+        log.debug("uploaded apk {}/{} ({} bytes) → {}", props.getApksBucket(), key, file.length(), url);
+        return url;
+    }
+
+    /** Delete an APK by its storage key. Returns true on success, false otherwise. */
+    public boolean deleteApk(String key) {
+        try {
+            s3.deleteObject(DeleteObjectRequest.builder().bucket(props.getApksBucket()).key(key).build());
+            return true;
+        } catch (Exception e) {
+            log.warn("deleteApk '{}' failed: {}", key, e.toString());
+            return false;
+        }
+    }
+
+    /** Compose the public-facing URL for an APK key (used when the runner asks the agent to install). */
+    public String publicUrlForApk(String key) {
+        return publicUrl(props.getApksBucket(), key);
     }
 
     private String put(String bucket, String key, byte[] data, String contentType) {

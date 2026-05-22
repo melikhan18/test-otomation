@@ -23,18 +23,24 @@ public class SuiteRunService {
     private final SuiteScenarioRepository suiteScenarios;
     private final ScenarioRepository scenarios;
     private final RunRepository runs;
+    private final AppRepository apps;
+    private final AppVersionRepository appVersions;
     private final SuiteRunOrchestrator orchestrator;
     private final com.devicefarm.automation.service.run.SuiteRunCancellationRegistry cancels;
 
     public SuiteRunService(SuiteRunRepository suiteRuns, SuiteRepository suites,
                            SuiteScenarioRepository suiteScenarios, ScenarioRepository scenarios,
-                           RunRepository runs, SuiteRunOrchestrator orchestrator,
+                           RunRepository runs,
+                           AppRepository apps, AppVersionRepository appVersions,
+                           SuiteRunOrchestrator orchestrator,
                            com.devicefarm.automation.service.run.SuiteRunCancellationRegistry cancels) {
         this.suiteRuns = suiteRuns;
         this.suites = suites;
         this.suiteScenarios = suiteScenarios;
         this.scenarios = scenarios;
         this.runs = runs;
+        this.apps = apps;
+        this.appVersions = appVersions;
         this.orchestrator = orchestrator;
         this.cancels = cancels;
     }
@@ -54,17 +60,38 @@ public class SuiteRunService {
         SuiteRunEntity sr = new SuiteRunEntity(ctx.legacyProductId(), ctx.projectId(),
                 suite.getId(), suite.getName(),
                 req.deviceId(), caller.userId(), req.environment());
+        // Faz 4 — validate target APK belongs to the same project as the suite.
+        if (req.targetAppVersionId() != null) {
+            AppVersionEntity v = appVersions.findById(req.targetAppVersionId())
+                    .orElseThrow(() -> ApiException.notFound("app version"));
+            AppEntity app = apps.findById(v.getAppId())
+                    .orElseThrow(() -> ApiException.notFound("app"));
+            if (!ctx.projectId().equals(app.getProjectId())) {
+                throw ApiException.forbidden("app version not in active project");
+            }
+            if (app.getArchivedAt() != null) {
+                throw ApiException.badRequest("target app has been archived");
+            }
+            sr.setTargetAppVersionId(v.getId());
+        }
+        if (req.resetHomeAfter() != null)   sr.setResetHomeAfter(req.resetHomeAfter());
+        if (req.killProcessAfter() != null) sr.setKillProcessAfter(req.killProcessAfter());
         sr = suiteRuns.save(sr);
 
         final long sid = sr.getId();
         final Integer isd = req.interStepDelayMs();
         final Boolean aw  = req.adaptiveWait();
+        final Long appVer  = sr.getTargetAppVersionId();
+        final boolean resetHome = sr.isResetHomeAfter();
+        final boolean killProc  = sr.isKillProcessAfter();
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override public void afterCommit() { orchestrator.submit(sid, userJwt, isd, aw); }
+                @Override public void afterCommit() {
+                    orchestrator.submit(sid, userJwt, isd, aw, appVer, resetHome, killProc);
+                }
             });
         } else {
-            orchestrator.submit(sid, userJwt, isd, aw);
+            orchestrator.submit(sid, userJwt, isd, aw, appVer, resetHome, killProc);
         }
         return toView(sr);
     }
@@ -138,7 +165,8 @@ public class SuiteRunService {
                 r.getTotalSteps(), r.getPassedSteps(), r.getFailedSteps(),
                 r.getDurationMs(),
                 r.getVideoUrl(),
-                r.getStartedAt(), r.getFinishedAt()
+                r.getStartedAt(), r.getFinishedAt(),
+                r.getAppPrepStatus()
         )).toList();
 
         return new SuiteRunDtos.View(
@@ -150,7 +178,25 @@ public class SuiteRunService {
                 sr.getErrorSummary(),
                 Tags.asList(sr.getTags()),
                 sr.getCreatedAt(),
-                children
+                children,
+                sr.getTargetAppVersionId(),
+                resolveTargetApp(sr.getTargetAppVersionId()),
+                sr.isResetHomeAfter(),
+                sr.isKillProcessAfter()
+        );
+    }
+
+    /** Mirror of {@code RunService.resolveTargetApp} — kept local rather than shared
+     *  to avoid coupling the two services through a common helper class. */
+    private com.devicefarm.automation.api.dto.RunDtos.TargetAppRef resolveTargetApp(Long versionId) {
+        if (versionId == null) return null;
+        AppVersionEntity v = appVersions.findById(versionId).orElse(null);
+        if (v == null) return null;
+        AppEntity app = apps.findById(v.getAppId()).orElse(null);
+        if (app == null) return null;
+        return new com.devicefarm.automation.api.dto.RunDtos.TargetAppRef(
+                app.getId(), app.getPackageName(), app.getDisplayName(),
+                v.getId(), v.getVersionCode(), v.getVersionName()
         );
     }
 }

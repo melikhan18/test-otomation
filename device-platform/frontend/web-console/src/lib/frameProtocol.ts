@@ -3,14 +3,25 @@
 // Mirrors the backend FrameType enum.
 
 export const FrameType = {
-  VIDEO_KEYFRAME:   0x01,
-  VIDEO_DELTA:      0x02,
-  CONTROL_COMMAND:  0x03,
-  INSPECT_REQUEST:  0x04,
-  INSPECT_RESPONSE: 0x05,
-  HEARTBEAT:        0x06,
-  STREAM_METADATA:  0x07,
-  FORCE_KEYFRAME:   0x08,
+  VIDEO_KEYFRAME:       0x01,
+  VIDEO_DELTA:          0x02,
+  CONTROL_COMMAND:      0x03,
+  INSPECT_REQUEST:      0x04,
+  INSPECT_RESPONSE:     0x05,
+  HEARTBEAT:            0x06,
+  STREAM_METADATA:      0x07,
+  FORCE_KEYFRAME:       0x08,
+  SCREENSHOT_REQUEST:   0x09,
+  SCREENSHOT_RESPONSE:  0x0a,
+  // Faz 2 — APK install + app launch + device reset
+  APP_INFO_REQUEST:     0x0b,
+  APP_INFO_RESPONSE:    0x0c,
+  INSTALL_APK_REQUEST:  0x0d,
+  INSTALL_APK_RESPONSE: 0x0e,
+  LAUNCH_APP_REQUEST:   0x0f,
+  LAUNCH_APP_RESPONSE:  0x10,
+  RESET_HOME_REQUEST:   0x11,
+  RESET_HOME_RESPONSE:  0x12,
 } as const;
 export type FrameTypeValue = (typeof FrameType)[keyof typeof FrameType];
 

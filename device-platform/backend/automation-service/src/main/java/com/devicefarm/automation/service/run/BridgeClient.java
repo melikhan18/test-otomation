@@ -1,14 +1,21 @@
 package com.devicefarm.automation.service.run;
 
+import com.devicefarm.automation.service.run.BridgeAppDtos.AppInfo;
+import com.devicefarm.automation.service.run.BridgeAppDtos.InstallResult;
+import com.devicefarm.automation.service.run.BridgeAppDtos.LaunchResult;
+import com.devicefarm.automation.service.run.BridgeAppDtos.ResetResult;
 import com.devicefarm.common.error.ApiException;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -26,6 +33,12 @@ public class BridgeClient {
     private final RestClient http;
 
     public BridgeClient(@Value("${app.services.bridge.url:http://localhost:8084}") String baseUrl) {
+        // The default RestClient reads the whole body before exposing it, which is fine
+        // for our small JSON / inline-PNG responses. APK install endpoint can wait up to
+        // five minutes server-side; the underlying JDK HttpClient has no default read
+        // timeout, so the bridge's own request-response timeout is the bound that fires
+        // first. We rely on that rather than a client-side timeout so the bridge always
+        // gets a chance to write a structured error body.
         this.http = RestClient.builder()
                 .baseUrl(baseUrl)
                 .build();
@@ -124,6 +137,98 @@ public class BridgeClient {
             return null;
         } catch (Exception e) {
             log.warn("screenshot call to bridge threw: {}", e.toString());
+            return null;
+        }
+    }
+
+    /* ────────────────── Faz 2: app-control endpoints ────────────────────── */
+
+    /**
+     * Ask the agent whether a package is installed and, if so, at which versionCode.
+     * Throws {@link ApiException} on non-2xx — RunOrchestrator treats this as a fatal
+     * prep failure (the run can't continue without knowing the install state).
+     */
+    public AppInfo appInfo(long sessionId, String sessionToken, String packageName) {
+        try {
+            return http.post()
+                    .uri("/api/bridge/sessions/{id}/app/info", sessionId)
+                    .header("Authorization", "Bearer " + sessionToken)
+                    .body(Map.of("packageName", packageName))
+                    .retrieve()
+                    .body(AppInfo.class);
+        } catch (HttpStatusCodeException e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY,
+                    "app-info failed (" + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+        }
+    }
+
+    /**
+     * Trigger an APK install on the device. The agent downloads from {@code downloadUrl}
+     * (typically a MinIO public URL), verifies SHA-256, and installs via
+     * {@code PackageInstaller}.
+     */
+    public InstallResult installApk(long sessionId, String sessionToken,
+                                    String downloadUrl, String sha256,
+                                    long expectedVersionCode, String packageName) {
+        Map<String, Object> body = Map.of(
+                "downloadUrl", downloadUrl,
+                "sha256", sha256,
+                "expectedVersionCode", expectedVersionCode,
+                "packageName", packageName
+        );
+        try {
+            return http.post()
+                    .uri("/api/bridge/sessions/{id}/app/install", sessionId)
+                    .header("Authorization", "Bearer " + sessionToken)
+                    .body(body)
+                    .retrieve()
+                    .body(InstallResult.class);
+        } catch (HttpStatusCodeException e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY,
+                    "app-install failed (" + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+        }
+    }
+
+    /** Bring the target app to the foreground via {@code Intent.ACTION_MAIN}. */
+    public LaunchResult launchApp(long sessionId, String sessionToken, String packageName) {
+        try {
+            return http.post()
+                    .uri("/api/bridge/sessions/{id}/app/launch", sessionId)
+                    .header("Authorization", "Bearer " + sessionToken)
+                    .body(Map.of("packageName", packageName))
+                    .retrieve()
+                    .body(LaunchResult.class);
+        } catch (HttpStatusCodeException e) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY,
+                    "app-launch failed (" + e.getStatusCode() + "): " + e.getResponseBodyAsString());
+        }
+    }
+
+    /**
+     * Return the device to the home screen. Best-effort — a reset hiccup must NOT fail
+     * the run that just finished, so we log and swallow errors and return null on failure.
+     * RunOrchestrator records the failure on the run row but doesn't roll back.
+     *
+     * @param packageName optional — when set together with {@code killProcess=true} on a
+     *                    Device Owner agent, also force-stops the target app.
+     */
+    public ResetResult resetHome(long sessionId, String sessionToken,
+                                 String packageName, Boolean killProcess) {
+        Map<String, Object> body = new HashMap<>();
+        if (packageName != null) body.put("packageName", packageName);
+        if (killProcess != null) body.put("killProcess", killProcess);
+        try {
+            return http.post()
+                    .uri("/api/bridge/sessions/{id}/reset-home", sessionId)
+                    .header("Authorization", "Bearer " + sessionToken)
+                    .body(body)
+                    .retrieve()
+                    .body(ResetResult.class);
+        } catch (HttpStatusCodeException e) {
+            log.warn("reset-home session={} HTTP {} body={}", sessionId, e.getStatusCode(), e.getResponseBodyAsString());
+            return null;
+        } catch (Exception e) {
+            log.warn("reset-home session={} threw: {}", sessionId, e.toString());
             return null;
         }
     }

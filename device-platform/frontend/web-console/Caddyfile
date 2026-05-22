@@ -34,7 +34,15 @@
     # ── API gateway (HTTP) ────────────────────────────────────────────────────
     # /api/* paths go straight through. The gateway sees the full /api/... path,
     # since its own routes are defined with that prefix in application.yml.
+    #
+    # request_body max_size lets APK uploads through to /api/automation/apps/.../versions
+    # without Caddy 413'ing in front of the backend. Slightly higher than
+    # automation-service's spring.servlet.multipart.max-request-size (510 MB) so the
+    # backend gets first crack at returning a proper validation error.
     handle /api/* {
+        request_body {
+            max_size 512MB
+        }
         reverse_proxy api-gateway:8080
     }
 

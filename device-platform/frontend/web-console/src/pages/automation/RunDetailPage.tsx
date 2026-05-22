@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertOctagon, CheckCircle2, Clock, Hourglass, MinusCircle, PauseCircle, RefreshCcw, X, XCircle,
+  AlertOctagon, CheckCircle2, Clock, Hourglass, MinusCircle, Package, PauseCircle, RefreshCcw, X, XCircle,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -119,6 +119,8 @@ export default function RunDetailPage() {
       <div className="px-6 py-6 space-y-4">
         <RunHeader run={run} suggestions={suggestions} />
 
+        {run.targetAppVersionId != null && <AppPrepBanner run={run} />}
+
         {/* Two columns on lg+: steps on the left, live/recording media on the right.
          *  On smaller widths the media stacks above the steps so phones/tablets get
          *  the most informative panel first.                                        */}
@@ -234,6 +236,62 @@ function RunRecording({ url }: { url: string }) {
       />
     </Card>
   );
+}
+
+/* ─────────────────────────────  App Prep banner  ────────────────────── */
+
+/**
+ * Shown above the step timeline when the run had a target APK. Surfaces whether the
+ * orchestrator skipped install (latest already on device), installed, updated, or
+ * failed — and how long the prep phase took. Failure detail expands inline because
+ * users debugging "why didn't the test start" need to see the agent's error
+ * (INSTALL_FAILED_UPDATE_INCOMPATIBLE, sha256 mismatch, etc.) right away.
+ */
+function AppPrepBanner({ run }: { run: RunView }) {
+  const status = run.appPrepStatus ?? "NOT_REQUESTED";
+  const tone = appPrepTone(status);
+  const target = run.targetApp;
+  return (
+    <Card className="px-4 py-3 flex items-start gap-3">
+      <Package size={14} className="mt-0.5 text-ink-muted shrink-0" />
+      <div className="flex-1 min-w-0 space-y-1">
+        <div className="flex items-center gap-2 flex-wrap text-xs">
+          <span className="font-semibold">App preparation</span>
+          <StatusBadge tone={tone}>{status}</StatusBadge>
+          {run.appPrepDurationMs != null && (
+            <span className="text-[10px] text-ink-muted font-mono">{run.appPrepDurationMs}ms</span>
+          )}
+        </div>
+        {target ? (
+          <div className="text-[11px] text-ink-muted">
+            Target: <span className="font-mono">{target.packageName}</span>{" "}
+            v{target.versionName ?? target.versionCode} (vc {target.versionCode})
+          </div>
+        ) : (
+          <div className="text-[11px] text-warning-500 italic">
+            Target APK version was deleted after the run started.
+          </div>
+        )}
+        {run.appPrepError && (
+          <details className="mt-1.5 text-[11px] text-danger-500">
+            <summary className="cursor-pointer font-medium">Error detail</summary>
+            <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10px]">{run.appPrepError}</pre>
+          </details>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function appPrepTone(status: string): "success" | "warning" | "danger" | "neutral" | "info" {
+  switch (status) {
+    case "ALREADY_LATEST": return "info";
+    case "INSTALLED":      return "success";
+    case "UPDATED":        return "success";
+    case "FAILED":         return "danger";
+    case "NOT_REQUESTED":  return "neutral";
+    default:               return "neutral";
+  }
 }
 
 /* ─────────────────────────────  Header  ────────────────────────────── */

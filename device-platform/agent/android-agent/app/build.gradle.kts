@@ -13,8 +13,8 @@ android {
         applicationId = "com.devicefarm.agent"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 10
+        versionName = "0.1.9"
     }
 
     buildTypes {

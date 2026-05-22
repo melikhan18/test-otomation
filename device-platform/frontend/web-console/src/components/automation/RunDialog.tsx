@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { deviceApi } from "@/lib/devices";
 import { runApi, testDataApi, type RunCreate } from "@/lib/automation";
+import TargetAppPicker from "@/components/automation/TargetAppPicker";
 
 type Props = {
   scenarioId: number;
@@ -30,6 +31,10 @@ export default function RunDialog({ scenarioId, scenarioName, onClose }: Props) 
   // to outlast the average screen transition / network hop after a tap.
   const [interStepDelayMs, setInterStepDelayMs] = useState<number>(500);
   const [adaptiveWait, setAdaptiveWait] = useState<boolean>(false);
+  // Faz 4: target app + reset config. Null version = skip app prep.
+  const [targetAppVersionId, setTargetAppVersionId] = useState<number | null>(null);
+  const [resetHomeAfter, setResetHomeAfter] = useState<boolean>(true);
+  const [killProcessAfter, setKillProcessAfter] = useState<boolean>(false);
 
   const onlineDevices = useMemo(
     () => (devicesQ.data ?? []).filter((d) => d.status === "ONLINE"),
@@ -114,6 +119,15 @@ export default function RunDialog({ scenarioId, scenarioName, onClose }: Props) 
               </>
             )}
           </div>
+
+          <TargetAppPicker
+            versionId={targetAppVersionId}
+            onVersionChange={setTargetAppVersionId}
+            resetHomeAfter={resetHomeAfter}
+            onResetHomeAfterChange={setResetHomeAfter}
+            killProcessAfter={killProcessAfter}
+            onKillProcessAfterChange={setKillProcessAfter}
+          />
 
           <div>
             <span className="label block mb-1.5">Environment</span>
@@ -201,7 +215,10 @@ export default function RunDialog({ scenarioId, scenarioName, onClose }: Props) 
             leftIcon={<Play size={12} />}
             disabled={!deviceId}
             loading={create.isPending}
-            onClick={() => deviceId && create.mutate({ scenarioId, deviceId, environment, interStepDelayMs, adaptiveWait })}
+            onClick={() => deviceId && create.mutate({
+              scenarioId, deviceId, environment, interStepDelayMs, adaptiveWait,
+              targetAppVersionId, resetHomeAfter, killProcessAfter,
+            })}
           >
             Run on device
           </Button>

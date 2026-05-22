@@ -32,6 +32,15 @@ public class RunOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(RunOrchestrator.class);
 
+    /**
+     * Idle time after the target app is launched, before the first step runs.
+     * Many apps show a splash screen / animate the launcher transition / wait for a
+     * cold-start network call — kicking off the locator resolve too early makes the
+     * first ASSERT_VISIBLE or CLICK miss its element. 10 s is a conservative default
+     * that handles every "normal" cold start; heavy apps may need more (future toggle).
+     */
+    private static final long APP_WARMUP_MS = 10_000L;
+
     /** Small pool — typical scenarios are I/O bound (HTTP to bridge + sleeps). */
     private final ExecutorService pool = Executors.newFixedThreadPool(4, r -> {
         Thread t = new Thread(r, "run-orchestrator");
@@ -45,6 +54,8 @@ public class RunOrchestrator {
     private final StepRepository steps;
     private final ElementRepository elements;
     private final TestDataRepository testData;
+    private final AppRepository apps;
+    private final AppVersionRepository appVersions;
     private final SessionClient sessions;
     private final BridgeClient bridge;
     private final ObjectStorage storage;
@@ -54,6 +65,7 @@ public class RunOrchestrator {
     public RunOrchestrator(RunRepository runs, StepResultRepository stepResults,
                            ScenarioRepository scenarios, StepRepository steps,
                            ElementRepository elements, TestDataRepository testData,
+                           AppRepository apps, AppVersionRepository appVersions,
                            SessionClient sessions, BridgeClient bridge,
                            ObjectStorage storage,
                            RunCancellationRegistry cancels,
@@ -64,6 +76,8 @@ public class RunOrchestrator {
         this.steps = steps;
         this.elements = elements;
         this.testData = testData;
+        this.apps = apps;
+        this.appVersions = appVersions;
         this.projectLookup = projectLookup;
         this.sessions = sessions;
         this.bridge = bridge;
@@ -114,8 +128,20 @@ public class RunOrchestrator {
 
         boolean anyFailure = false;
         boolean cancelled = false;
+        boolean prepFailed = false;
         int interStepDelay = Math.max(0, run.getInterStepDelayMs());
         boolean adaptive = run.isAdaptiveWait();
+
+        // Resolve target app + version once — used both by app prep and by the
+        // post-run reset (so we don't requery in the finally block).
+        String targetPackageName = null;
+        if (run.getTargetAppVersionId() != null) {
+            AppVersionEntity v = appVersions.findById(run.getTargetAppVersionId()).orElse(null);
+            if (v != null) {
+                AppEntity app = apps.findById(v.getAppId()).orElse(null);
+                if (app != null) targetPackageName = app.getPackageName();
+            }
+        }
 
         // Start the recording BEFORE the keyframe nudge so the keyframe is included as the
         // first frame in the MP4 (otherwise the video opens on a partial P-frame).
@@ -125,8 +151,28 @@ public class RunOrchestrator {
             // Ensure the bridge has a fresh keyframe (useful when we add screenshots later).
             bridge.forceKeyframe(reservation.sessionId(), reservation.sessionToken());
 
+            // ── Faz 4: App preparation phase ─────────────────────────────────
+            // Runs before the step loop. On failure we skip steps but still
+            // capture the recording + release the session, so the user gets a
+            // FAILED run with a meaningful errorSummary.
+            AppPrepResult prep = runAppPrep(run, reservation);
+            persistAppPrep(runId, prep);
+            if (prep.failed) {
+                prepFailed = true;
+                anyFailure = true;
+            }
+
             List<StepResultEntity> placeholders = stepResults.findAllByRunIdOrderByOrderIndexAsc(runId);
-            for (int i = 0; i < plan.size(); i++) {
+            if (prepFailed) {
+                // Mark every step SKIPPED — orchestrator never ran them.
+                for (StepResultEntity p : placeholders) {
+                    if (p.getStatus() == StepResultStatus.PENDING) {
+                        p.setStatus(StepResultStatus.SKIPPED);
+                        stepResults.save(p);
+                    }
+                }
+            }
+            for (int i = 0; !prepFailed && i < plan.size(); i++) {
                 // Cooperative cancel checkpoint — before kicking off the step. If the
                 // user pressed Stop while we were sleeping between steps (or running
                 // the previous step) we exit the loop cleanly here. The finally block
@@ -190,6 +236,18 @@ public class RunOrchestrator {
             // it would lose the very last frames. captureAndAttachVideo handles the
             // VIDEO_TAIL_MS pause so the screen's final state lands in the MP4.
             captureAndAttachVideo(reservation.sessionId(), reservation.sessionToken(), runId);
+            // ── Faz 4: post-run reset-home ──────────────────────────────────
+            // Best-effort — must NOT throw or fail the run that just finished.
+            // Done after the recording stops so the final UI state is preserved,
+            // and before session release so the session token is still valid.
+            if (run.isResetHomeAfter()) {
+                try {
+                    bridge.resetHome(reservation.sessionId(), reservation.sessionToken(),
+                            targetPackageName, run.isKillProcessAfter());
+                } catch (Exception e) {
+                    log.warn("reset-home for run {} threw: {}", runId, e.toString());
+                }
+            }
             sessions.release(reservation.sessionId(), userJwt);
             // Free the cancel-flag slot — even if no cancel was requested, removing
             // a non-existent key is a no-op.
@@ -198,6 +256,109 @@ public class RunOrchestrator {
 
         if (cancelled) finalizeCancelled(run);
         else           finalize(run, anyFailure);
+    }
+
+    /* ─────────────────── Faz 4: app preparation ─────────────────── */
+
+    /**
+     * Decides whether the device needs an APK install/update, performs it, then launches
+     * the app. The {@link AppPrepResult} carries enough detail to fill the {@code
+     * app_prep_*} columns on the run row.
+     *
+     * <p>Decision matrix (versionCode comparison):</p>
+     * <table>
+     *   <tr><th>device state</th><th>target vc</th><th>action</th></tr>
+     *   <tr><td>not installed</td><td>any</td><td>INSTALLED</td></tr>
+     *   <tr><td>installed, vc &lt; target</td><td>any</td><td>UPDATED</td></tr>
+     *   <tr><td>installed, vc == target</td><td>any</td><td>ALREADY_LATEST</td></tr>
+     *   <tr><td>installed, vc &gt; target</td><td>any</td><td>ALREADY_LATEST (no downgrade)</td></tr>
+     * </table>
+     */
+    private AppPrepResult runAppPrep(RunEntity run, SessionClient.Reservation reservation) {
+        if (run.getTargetAppVersionId() == null) {
+            return AppPrepResult.notRequested();
+        }
+        long startMs = System.currentTimeMillis();
+        try {
+            AppVersionEntity target = appVersions.findById(run.getTargetAppVersionId())
+                    .orElseThrow(() -> ApiException.notFound("app version"));
+            AppEntity targetApp = apps.findById(target.getAppId())
+                    .orElseThrow(() -> ApiException.notFound("app"));
+
+            log.info("run {} app prep: package={} target vc={}", run.getId(),
+                    targetApp.getPackageName(), target.getVersionCode());
+
+            BridgeAppDtos.AppInfo info = bridge.appInfo(reservation.sessionId(),
+                    reservation.sessionToken(), targetApp.getPackageName());
+
+            String decision;
+            if (info == null || !info.installed()) {
+                decision = "INSTALLED";
+            } else if (info.versionCode() == null || info.versionCode() < target.getVersionCode()) {
+                decision = "UPDATED";
+            } else {
+                // Equal or newer-installed both mean "use what's there" — we never
+                // downgrade because a newer build may carry data migrations.
+                decision = "ALREADY_LATEST";
+            }
+
+            if ("INSTALLED".equals(decision) || "UPDATED".equals(decision)) {
+                String url = storage.publicUrlForApk(target.getStorageKey());
+                BridgeAppDtos.InstallResult ir = bridge.installApk(
+                        reservation.sessionId(), reservation.sessionToken(),
+                        url, target.getSha256(), target.getVersionCode(), targetApp.getPackageName());
+                if (ir == null || !ir.ok()) {
+                    String detail = (ir != null ? (ir.errorCode() + ": " + ir.errorMessage()) : "no response");
+                    return AppPrepResult.failed("install: " + detail,
+                            (int) (System.currentTimeMillis() - startMs));
+                }
+            }
+
+            BridgeAppDtos.LaunchResult lr = bridge.launchApp(reservation.sessionId(),
+                    reservation.sessionToken(), targetApp.getPackageName());
+            if (lr == null || !lr.ok()) {
+                String detail = (lr != null ? lr.errorMessage() : "no response");
+                return AppPrepResult.failed("launch: " + detail,
+                        (int) (System.currentTimeMillis() - startMs));
+            }
+
+            // App is foreground now — give it time to finish its cold-start sequence
+            // (splash, lazy-init, first network call). Without this the very first step
+            // sometimes fires before the UI tree is settled and misses its locator.
+            // Cancellation-aware: if the user pressed Stop during the wait we exit
+            // cleanly; the surrounding step loop will see the cancel flag at its first
+            // checkpoint and finalize the run as CANCELLED.
+            log.info("run {} app warmup: waiting {} ms after launch", run.getId(), APP_WARMUP_MS);
+            sleepCancellable(APP_WARMUP_MS, run.getId());
+
+            return AppPrepResult.ok(decision, (int) (System.currentTimeMillis() - startMs));
+        } catch (Exception e) {
+            log.warn("run {} app prep threw: {}", run.getId(), e.toString());
+            return AppPrepResult.failed("exception: " + e.getMessage(),
+                    (int) (System.currentTimeMillis() - startMs));
+        }
+    }
+
+    @Transactional
+    protected void persistAppPrep(long runId, AppPrepResult prep) {
+        runs.findById(runId).ifPresent(r -> {
+            r.setAppPrepStatus(prep.status);
+            r.setAppPrepDurationMs(prep.durationMs);
+            r.setAppPrepError(prep.error);
+            if (prep.failed) {
+                // Propagate into errorSummary so the existing reports UI surfaces the
+                // failure without needing the app_prep_* columns wired in yet.
+                r.setErrorSummary("App preparation failed: " + prep.error);
+            }
+            runs.save(r);
+        });
+    }
+
+    /** Outcome of the app prep phase. */
+    private record AppPrepResult(String status, Integer durationMs, String error, boolean failed) {
+        static AppPrepResult notRequested() { return new AppPrepResult("NOT_REQUESTED", null, null, false); }
+        static AppPrepResult ok(String status, int durationMs) { return new AppPrepResult(status, durationMs, null, false); }
+        static AppPrepResult failed(String error, int durationMs) { return new AppPrepResult("FAILED", durationMs, error, true); }
     }
 
     /** Trailing seconds captured after the last step so the final UI state (success toast,
