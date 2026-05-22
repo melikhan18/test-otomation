@@ -1,0 +1,67 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Reverse proxy + static frontend.
+#
+# {$DOMAIN} comes from compose env. With DOMAIN=maieras.com Caddy binds
+# both example.com and www.example.com to the same handler block.
+#
+# TLS is automatic — Caddy issues + renews Let's Encrypt certs on its own.
+# Email is used as the ACME contact (renewal warnings, abuse reports).
+# ─────────────────────────────────────────────────────────────────────────────
+
+{
+    # ACME contact email — set ACME_EMAIL in .env. Required by Let's Encrypt's
+    # ToS; they email here if a renewal is failing within ~30 days of expiry.
+    email {$ACME_EMAIL}
+}
+
+{$DOMAIN}, www.{$DOMAIN} {
+    # gzip + zstd: ~70% saving on the JSON-heavy gateway responses + the
+    # 1.5 MB built JS bundle. Cheap, no CPU concern.
+    encode gzip zstd
+
+    # Reasonable security headers. Tweak CSP if you add third-party scripts.
+    header {
+        # Tell browsers to stick to HTTPS for 6 months once they've seen it.
+        Strict-Transport-Security "max-age=15552000; includeSubDomains"
+        # Prevent MIME-type sniffing of responses.
+        X-Content-Type-Options "nosniff"
+        # Don't leak the Referer to other origins.
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Hide which webserver we run.
+        -Server
+    }
+
+    # ── API gateway (HTTP) ────────────────────────────────────────────────────
+    # /api/* paths go straight through. The gateway sees the full /api/... path,
+    # since its own routes are defined with that prefix in application.yml.
+    handle /api/* {
+        reverse_proxy api-gateway:8080
+    }
+
+    # ── WebSocket endpoints ──────────────────────────────────────────────────
+    # Caddy auto-detects the Upgrade header and forwards as WS — no extra config
+    # needed. Long-lived connections; the default flush+timeout settings handle
+    # video frames at 30fps/8Mbps without buffering.
+    handle /ws/* {
+        reverse_proxy api-gateway:8080
+    }
+
+    # ── MinIO public bucket access ───────────────────────────────────────────
+    # We strip /minio/ before forwarding because MinIO expects bucket names at
+    # the root (e.g. /videos/foo.mp4). MINIO_PUBLIC_URL in the backend points
+    # at https://{$DOMAIN}/minio so generated URLs land here.
+    handle /minio/* {
+        uri strip_prefix /minio
+        reverse_proxy minio:9000
+    }
+
+    # ── SPA fallback ─────────────────────────────────────────────────────────
+    # Anything else → static frontend. The try_files line is the magic that
+    # makes React Router work: every unknown route returns index.html so the
+    # client-side router can take over.
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

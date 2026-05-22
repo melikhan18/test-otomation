@@ -242,6 +242,36 @@ services:
       - "${GATEWAY_BIND:-0.0.0.0}:8080:8080"
     restart: unless-stopped
 
+  # ── Web console + reverse proxy (production only) ───────────────────────────
+  # Single Caddy container does two jobs:
+  #   1) Serves the static React bundle (built into /srv inside the image).
+  #   2) Reverse-proxies /api → api-gateway, /ws → api-gateway, /minio → minio.
+  # Caddy issues + auto-renews Let's Encrypt certs for $DOMAIN and www.$DOMAIN.
+  # Certificates persist in dp_caddydata so restarts don't re-issue and trip
+  # the ACME rate limit.
+  #
+  # Activate with:   docker compose --profile prod up -d --build
+  web-console:
+    build:
+      context: ./frontend/web-console
+    environment:
+      DOMAIN:      ${DOMAIN:-maieras.com}
+      ACME_EMAIL:  ${ACME_EMAIL:-admin@${DOMAIN:-maieras.com}}
+    depends_on:
+      - api-gateway
+      - minio
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC) — Caddy advertises it via Alt-Svc
+    volumes:
+      - dp_caddydata:/data         # certificates + ACME account state
+      - dp_caddyconfig:/config     # runtime config snapshot
+    restart: unless-stopped
+    profiles: ["prod"]
+
 volumes:
   dp_pgdata:
   dp_miniodata:
+  dp_caddydata:
+  dp_caddyconfig:
