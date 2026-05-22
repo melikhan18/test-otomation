@@ -4,7 +4,10 @@
 # would silently resolve to different versions and break reproducibility.
 FROM node:20-alpine AS build
 WORKDIR /app
-RUN corepack enable
+# Pin pnpm to v9 to match pnpm-lock.yaml (lockfileVersion 9.0). Corepack
+# otherwise pulls the very latest (v11+), which requires Node 22 and crashes
+# at install time with ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite.
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
