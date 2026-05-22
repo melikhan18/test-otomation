@@ -64,6 +64,28 @@ public class RunEntity {
     @Column(columnDefinition = "TEXT[]", nullable = false)
     private String[] tags = new String[0];
 
+    /** Optional target APK. When null, the orchestrator skips the app preparation phase. */
+    @Column(name = "target_app_version_id")
+    private Long targetAppVersionId;
+
+    /** Press HOME at the end of the run so the next test starts from a clean state. */
+    @Column(name = "reset_home_after", nullable = false)
+    private boolean resetHomeAfter = true;
+
+    /** Also force-stop the target app (only effective on Device Owner cihazda). */
+    @Column(name = "kill_process_after", nullable = false)
+    private boolean killProcessAfter = false;
+
+    /** Outcome of the pre-step app prep phase. See V12 migration comment for valid values. */
+    @Column(name = "app_prep_status")
+    private String appPrepStatus;
+
+    @Column(name = "app_prep_duration_ms")
+    private Integer appPrepDurationMs;
+
+    @Column(name = "app_prep_error", columnDefinition = "TEXT")
+    private String appPrepError;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -103,5 +125,11 @@ public class RunEntity {
     public int getInterStepDelayMs() { return interStepDelayMs; } public void setInterStepDelayMs(int v) { this.interStepDelayMs = v; }
     public boolean isAdaptiveWait() { return adaptiveWait; }      public void setAdaptiveWait(boolean v) { this.adaptiveWait = v; }
     public String[] getTags() { return tags; }                    public void setTags(String[] v) { this.tags = v == null ? new String[0] : v; }
+    public Long getTargetAppVersionId() { return targetAppVersionId; } public void setTargetAppVersionId(Long v) { this.targetAppVersionId = v; }
+    public boolean isResetHomeAfter() { return resetHomeAfter; }       public void setResetHomeAfter(boolean v) { this.resetHomeAfter = v; }
+    public boolean isKillProcessAfter() { return killProcessAfter; }   public void setKillProcessAfter(boolean v) { this.killProcessAfter = v; }
+    public String getAppPrepStatus() { return appPrepStatus; }         public void setAppPrepStatus(String v) { this.appPrepStatus = v; }
+    public Integer getAppPrepDurationMs() { return appPrepDurationMs; } public void setAppPrepDurationMs(Integer v) { this.appPrepDurationMs = v; }
+    public String getAppPrepError() { return appPrepError; }           public void setAppPrepError(String v) { this.appPrepError = v; }
     public Instant getCreatedAt() { return createdAt; }
 }

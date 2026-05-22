@@ -238,6 +238,21 @@ function ChildRow({ i, r }: { i: number; r: SuiteRunChild }) {
           <span className="text-[10px] text-ink-muted font-mono">
             {r.passedSteps}/{r.totalSteps} passed
           </span>
+          {r.appPrepStatus && r.appPrepStatus !== "NOT_REQUESTED" && (
+            <span
+              className={
+                "text-[9px] font-medium uppercase tracking-wider px-1.5 py-0.5 rounded border " +
+                (r.appPrepStatus === "FAILED"
+                  ? "border-danger-500/30 bg-danger-500/10 text-danger-500"
+                  : r.appPrepStatus === "INSTALLED" || r.appPrepStatus === "UPDATED"
+                    ? "border-success-500/30 bg-success-500/10 text-success-500"
+                    : "border-brand-500/30 bg-brand-500/10 text-brand-400")
+              }
+              title="App preparation outcome"
+            >
+              app: {r.appPrepStatus.toLowerCase().replace("_", " ")}
+            </span>
+          )}
           {r.durationMs != null && (
             <span className="text-[10px] text-ink-muted ml-auto inline-flex items-center gap-1">
               <Clock size={10} /> {(r.durationMs / 1000).toFixed(1)}s

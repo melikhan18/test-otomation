@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   BarChart3, Building2, Database, FolderKanban, FolderOpen, LogOut, Monitor, Moon,
-  ShieldCheck, Smartphone, Sun, Target, UserCircle2, UserCog, Users,
+  Package, ShieldCheck, Smartphone, Sun, Target, UserCircle2, UserCog, Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useAuthStore, useEffectiveRole, type EffectiveRole } from "@/store/auth";
@@ -29,6 +29,7 @@ function buildSections(platformAdmin: boolean, role: EffectiveRole): NavSection[
         { to: "/automation/reports",   label: "Reports",   icon: <BarChart3 size={16} /> },
         { to: "/automation/elements",  label: "Elements",  icon: <Target size={16} /> },
         { to: "/automation/data",      label: "Test data", icon: <Database size={16} /> },
+        { to: "/automation/apps",      label: "Apps",      icon: <Package size={16} /> },
       ],
     },
   ];

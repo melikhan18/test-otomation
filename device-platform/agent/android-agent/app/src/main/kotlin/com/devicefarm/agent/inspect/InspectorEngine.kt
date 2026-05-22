@@ -3,7 +3,9 @@ package com.devicefarm.agent.inspect
 import android.content.res.Resources
 import android.graphics.Rect
 import android.os.Build
+import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import com.devicefarm.agent.control.ControlAccessibilityService
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,18 +34,87 @@ object InspectorEngine {
             out.put("error", "accessibility-service-not-enabled")
             return out.toString()
         }
-        val root = svc.rootInActiveWindow
+        val pick = pickInspectableWindow(svc)
+        val root = pick?.root
         if (root == null) {
             out.put("error", "no-active-window")
             return out.toString()
         }
         try {
+            // Surface which window we actually inspected so the user can tell when the
+            // tree they're looking at belongs to a system permission dialog vs the app.
+            out.put("windowPackage", root.packageName?.toString() ?: "")
+            out.put("windowType", windowTypeLabel(pick.type))
             out.put("root", serialize(root))
         } catch (t: Throwable) {
             out.put("error", "serialize-failed: ${t.javaClass.simpleName}: ${t.message}")
         }
         return out.toString()
     }
+
+    /**
+     * Pick the most useful window to inspect. Default {@code rootInActiveWindow} only
+     * surfaces the foreground app and **misses system dialogs** (permission prompts,
+     * install confirm, system overlays) — exactly the ones a user is most likely to need
+     * to write a locator against.
+     *
+     * Strategy: walk {@code svc.windows} (requires {@code flagRetrieveInteractiveWindows},
+     * which is set in accessibility_service_config.xml), filter out our own agent's
+     * window so it never shadows the real target, then prefer:
+     *   1. The window the user is actively typing into (focused)
+     *   2. Any non-application window that's on top (permission / install / system dialogs)
+     *   3. The active application window
+     *   4. Fall back to {@code rootInActiveWindow} for older OEMs that return an empty list
+     */
+    private fun pickInspectableWindow(svc: ControlAccessibilityService): WindowPick? {
+        val windows = try { svc.windows } catch (e: Exception) { Log.w(TAG, "windows query threw", e); null }
+        if (windows.isNullOrEmpty()) {
+            val r = svc.rootInActiveWindow ?: return null
+            return WindowPick(r, AccessibilityWindowInfo.TYPE_APPLICATION)
+        }
+        val ownPkg = svc.packageName
+        val candidates = windows.filter { w ->
+            val r = w.root ?: return@filter false
+            val pkg = r.packageName?.toString()
+            pkg != ownPkg
+        }
+        if (candidates.isEmpty()) {
+            // Only our own window survived the filter — fall back so we still return *something*.
+            val r = svc.rootInActiveWindow ?: return null
+            return WindowPick(r, AccessibilityWindowInfo.TYPE_APPLICATION)
+        }
+
+        // 1) Focused (keyboard / typing focus) — best signal of "the user is here"
+        candidates.firstOrNull { it.isFocused }?.let { return WindowPick(it.root!!, it.type) }
+
+        // 2) Non-application windows on top of the app (dialogs, system overlays). Pick
+        //    the one with the highest layer — that's the topmost in z-order, i.e. what
+        //    the user is actually seeing.
+        candidates
+                .filter { it.type != AccessibilityWindowInfo.TYPE_APPLICATION }
+                .maxByOrNull { it.layer }
+                ?.let { return WindowPick(it.root!!, it.type) }
+
+        // 3) Active application window
+        candidates.firstOrNull { it.isActive && it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                ?.let { return WindowPick(it.root!!, it.type) }
+
+        // 4) Anything with a root — last resort
+        return candidates.firstOrNull()?.let { WindowPick(it.root!!, it.type) }
+    }
+
+    private data class WindowPick(val root: AccessibilityNodeInfo, val type: Int)
+
+    private fun windowTypeLabel(type: Int): String = when (type) {
+        AccessibilityWindowInfo.TYPE_APPLICATION       -> "application"
+        AccessibilityWindowInfo.TYPE_INPUT_METHOD      -> "input_method"
+        AccessibilityWindowInfo.TYPE_SYSTEM            -> "system"
+        AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY -> "a11y_overlay"
+        AccessibilityWindowInfo.TYPE_SPLIT_SCREEN_DIVIDER  -> "split_screen_divider"
+        else -> "unknown($type)"
+    }
+
+    private const val TAG = "InspectorEngine"
 
     private fun serialize(node: AccessibilityNodeInfo, depth: Int = 0, siblingIndex: Int = 0): JSONObject {
         val obj = JSONObject()

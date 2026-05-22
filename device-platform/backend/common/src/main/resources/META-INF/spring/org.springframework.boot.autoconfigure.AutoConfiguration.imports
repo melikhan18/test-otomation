@@ -1,1 +1,2 @@
 com.devicefarm.common.jwt.JwtAutoConfiguration
+com.devicefarm.common.error.ErrorAutoConfiguration

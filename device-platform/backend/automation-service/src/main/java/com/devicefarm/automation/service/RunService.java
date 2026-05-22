@@ -21,15 +21,21 @@ public class RunService {
     private final RunRepository runs;
     private final StepResultRepository stepResults;
     private final ScenarioRepository scenarios;
+    private final AppRepository apps;
+    private final AppVersionRepository appVersions;
     private final RunOrchestrator orchestrator;
     private final com.devicefarm.automation.service.run.RunCancellationRegistry cancels;
 
     public RunService(RunRepository runs, StepResultRepository stepResults,
-                      ScenarioRepository scenarios, RunOrchestrator orchestrator,
+                      ScenarioRepository scenarios,
+                      AppRepository apps, AppVersionRepository appVersions,
+                      RunOrchestrator orchestrator,
                       com.devicefarm.automation.service.run.RunCancellationRegistry cancels) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
+        this.apps = apps;
+        this.appVersions = appVersions;
         this.orchestrator = orchestrator;
         this.cancels = cancels;
     }
@@ -52,6 +58,23 @@ public class RunService {
         if (req.adaptiveWait() != null) {
             run.setAdaptiveWait(req.adaptiveWait());
         }
+        // Faz 4 — target app + reset config. Validate cross-project access on the
+        // APK version so a project can't smuggle in a foreign company's binary.
+        if (req.targetAppVersionId() != null) {
+            AppVersionEntity v = appVersions.findById(req.targetAppVersionId())
+                    .orElseThrow(() -> ApiException.notFound("app version"));
+            AppEntity app = apps.findById(v.getAppId())
+                    .orElseThrow(() -> ApiException.notFound("app"));
+            if (!ctx.projectId().equals(app.getProjectId())) {
+                throw ApiException.forbidden("app version not in active project");
+            }
+            if (app.getArchivedAt() != null) {
+                throw ApiException.badRequest("target app has been archived");
+            }
+            run.setTargetAppVersionId(v.getId());
+        }
+        if (req.resetHomeAfter() != null)   run.setResetHomeAfter(req.resetHomeAfter());
+        if (req.killProcessAfter() != null) run.setKillProcessAfter(req.killProcessAfter());
         run = runs.save(run);
 
         final long runId = run.getId();
@@ -92,8 +115,24 @@ public class RunService {
                 r.getDurationMs(),
                 r.getVideoUrl(), r.getSuiteRunId(),
                 Tags.asList(r.getTags()),
-                r.getCreatedAt(), r.getStartedAt(), r.getFinishedAt()
+                r.getCreatedAt(), r.getStartedAt(), r.getFinishedAt(),
+                r.getTargetAppVersionId(),
+                r.getAppPrepStatus()
         )).toList();
+    }
+
+    /** Resolve APK + version for the view layer. Returns null when no target was set
+     *  or the version has been deleted (ON DELETE SET NULL leaves a null FK). */
+    private RunDtos.TargetAppRef resolveTargetApp(Long versionId) {
+        if (versionId == null) return null;
+        AppVersionEntity v = appVersions.findById(versionId).orElse(null);
+        if (v == null) return null;
+        AppEntity app = apps.findById(v.getAppId()).orElse(null);
+        if (app == null) return null;
+        return new RunDtos.TargetAppRef(
+                app.getId(), app.getPackageName(), app.getDisplayName(),
+                v.getId(), v.getVersionCode(), v.getVersionName()
+        );
     }
 
     @Transactional
@@ -162,7 +201,14 @@ public class RunService {
                 r.getVideoUrl(),
                 Tags.asList(r.getTags()),
                 r.getCreatedAt(),
-                rows
+                rows,
+                r.getTargetAppVersionId(),
+                resolveTargetApp(r.getTargetAppVersionId()),
+                r.getAppPrepStatus(),
+                r.getAppPrepDurationMs(),
+                r.getAppPrepError(),
+                r.isResetHomeAfter(),
+                r.isKillProcessAfter()
         );
     }
 }

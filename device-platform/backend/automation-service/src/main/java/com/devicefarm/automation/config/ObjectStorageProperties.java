@@ -16,6 +16,7 @@ public class ObjectStorageProperties {
     private String region = "us-east-1";
     private String screenshotsBucket = "screenshots";
     private String videosBucket      = "videos";
+    private String apksBucket        = "apks";
 
     public String getEndpoint() { return endpoint; }                     public void setEndpoint(String v) { this.endpoint = v; }
     public String getPublicUrl() { return publicUrl; }                   public void setPublicUrl(String v) { this.publicUrl = v; }
@@ -24,4 +25,5 @@ public class ObjectStorageProperties {
     public String getRegion() { return region; }                         public void setRegion(String v) { this.region = v; }
     public String getScreenshotsBucket() { return screenshotsBucket; }   public void setScreenshotsBucket(String v) { this.screenshotsBucket = v; }
     public String getVideosBucket() { return videosBucket; }             public void setVideosBucket(String v) { this.videosBucket = v; }
+    public String getApksBucket() { return apksBucket; }                 public void setApksBucket(String v) { this.apksBucket = v; }
 }

@@ -48,6 +48,16 @@ public class SuiteRunEntity {
     @Column(columnDefinition = "TEXT[]", nullable = false)
     private String[] tags = new String[0];
 
+    /** Optional target APK — propagated to each child run when set. */
+    @Column(name = "target_app_version_id")
+    private Long targetAppVersionId;
+
+    @Column(name = "reset_home_after", nullable = false)
+    private boolean resetHomeAfter = true;
+
+    @Column(name = "kill_process_after", nullable = false)
+    private boolean killProcessAfter = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -82,5 +92,8 @@ public class SuiteRunEntity {
     public int getFailedScenarios() { return failedScenarios; }   public void setFailedScenarios(int v) { this.failedScenarios = v; }
     public String getErrorSummary() { return errorSummary; }      public void setErrorSummary(String v) { this.errorSummary = v; }
     public String[] getTags() { return tags; }                    public void setTags(String[] v) { this.tags = v == null ? new String[0] : v; }
+    public Long getTargetAppVersionId() { return targetAppVersionId; } public void setTargetAppVersionId(Long v) { this.targetAppVersionId = v; }
+    public boolean isResetHomeAfter() { return resetHomeAfter; }       public void setResetHomeAfter(boolean v) { this.resetHomeAfter = v; }
+    public boolean isKillProcessAfter() { return killProcessAfter; }   public void setKillProcessAfter(boolean v) { this.killProcessAfter = v; }
     public Instant getCreatedAt() { return createdAt; }
 }

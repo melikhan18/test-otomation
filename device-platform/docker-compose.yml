@@ -94,8 +94,10 @@ services:
       mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" &&
       mc mb -p local/screenshots &&
       mc mb -p local/videos &&
+      mc mb -p local/apks &&
       mc anonymous set download local/screenshots &&
       mc anonymous set download local/videos &&
+      mc anonymous set download local/apks &&
       echo 'minio buckets ready'
       "
     restart: "no"

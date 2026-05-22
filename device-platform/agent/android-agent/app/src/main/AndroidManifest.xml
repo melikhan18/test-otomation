@@ -10,6 +10,37 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!--
+        APK install via PackageInstaller. On Android 8+ this also requires the user to
+        toggle "Install unknown apps" in system settings for our package; the
+        AccessibilityService takes over from there to auto-tap "Install" in the system
+        dialog (or, on Device Owner cihazlarda, the install is fully silent).
+    -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Best-effort cleanup between runs. Only affects cached/background processes on standard cihazda. -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+
+    <!--
+        Android 11+ (API 30) package visibility: by default a non-system app can't see
+        anything beyond a small allowlist. The device-farm agent must be able to:
+          - check whether a target app is installed (PackageManager.getPackageInfo),
+          - resolve its launcher activity (PackageManager.getLaunchIntentForPackage).
+        QUERY_ALL_PACKAGES grants both. This is an "internal sideloaded farm tool"
+        permission — not for Play Store distribution.
+    -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <!--
+        Defense-in-depth: even if a future Android version revokes QUERY_ALL_PACKAGES,
+        explicit <queries> filters cover the two operations we actually do — MAIN+LAUNCHER
+        for launch, plus arbitrary-package info via <package> would need each name listed.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
 
     <application
         android:label="@string/app_name"

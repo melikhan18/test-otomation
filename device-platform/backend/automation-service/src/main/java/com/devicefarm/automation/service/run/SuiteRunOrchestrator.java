@@ -67,9 +67,13 @@ public class SuiteRunOrchestrator {
     }
 
     public void submit(long suiteRunId, String userJwt,
-                       Integer interStepDelayMs, Boolean adaptiveWait) {
+                       Integer interStepDelayMs, Boolean adaptiveWait,
+                       Long targetAppVersionId, boolean resetHomeAfter, boolean killProcessAfter) {
         pool.submit(() -> {
-            try { execute(suiteRunId, userJwt, interStepDelayMs, adaptiveWait); }
+            try {
+                execute(suiteRunId, userJwt, interStepDelayMs, adaptiveWait,
+                        targetAppVersionId, resetHomeAfter, killProcessAfter);
+            }
             catch (Throwable t) {
                 log.error("suite run {} crashed", suiteRunId, t);
                 markAborted(suiteRunId, "orchestrator crash: " + t.getMessage());
@@ -81,7 +85,8 @@ public class SuiteRunOrchestrator {
     /* ───────────────────────────  main loop  ─────────────────────────── */
 
     private void execute(long suiteRunId, String userJwt,
-                         Integer interStepDelayMs, Boolean adaptiveWait) {
+                         Integer interStepDelayMs, Boolean adaptiveWait,
+                         Long targetAppVersionId, boolean resetHomeAfter, boolean killProcessAfter) {
         SuiteRunEntity sr = suiteRuns.findById(suiteRunId)
                 .orElseThrow(() -> ApiException.notFound("suite run"));
         SuiteEntity suite = suites.findById(sr.getSuiteId())
@@ -114,7 +119,8 @@ public class SuiteRunOrchestrator {
                 log.warn("suite run {} skipping missing scenario {}", suiteRunId, link.getScenarioId());
                 continue;
             }
-            RunEntity childRun = createChildRun(sr, scenario, interStepDelayMs, adaptiveWait);
+            RunEntity childRun = createChildRun(sr, scenario, interStepDelayMs, adaptiveWait,
+                    targetAppVersionId, resetHomeAfter, killProcessAfter);
             runOrchestrator.submit(childRun.getId(), userJwt);
 
             RunStatus terminal = waitForTerminal(suiteRunId, childRun.getId());
@@ -162,7 +168,9 @@ public class SuiteRunOrchestrator {
 
     @Transactional
     protected RunEntity createChildRun(SuiteRunEntity sr, ScenarioEntity scenario,
-                                       Integer interStepDelayMs, Boolean adaptiveWait) {
+                                       Integer interStepDelayMs, Boolean adaptiveWait,
+                                       Long targetAppVersionId, boolean resetHomeAfter,
+                                       boolean killProcessAfter) {
         RunEntity run = new RunEntity(sr.getProductId(), sr.getProjectId(),
                 scenario.getId(), sr.getDeviceId(),
                 sr.getTriggeredByUserId(), sr.getEnvironment());
@@ -176,6 +184,13 @@ public class SuiteRunOrchestrator {
         if (adaptiveWait != null) {
             run.setAdaptiveWait(adaptiveWait);
         }
+        // Faz 4 — propagate the suite-level app + reset config to each child. Same
+        // APK + same reset toggle for every scenario in the suite. If a future
+        // requirement needs per-scenario overrides we'd add a join column to
+        // suite_scenarios; for now the suite-level setting wins.
+        run.setTargetAppVersionId(targetAppVersionId);
+        run.setResetHomeAfter(resetHomeAfter);
+        run.setKillProcessAfter(killProcessAfter);
         return runs.save(run);
     }
 

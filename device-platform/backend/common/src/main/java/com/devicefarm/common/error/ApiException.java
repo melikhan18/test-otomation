@@ -17,4 +17,5 @@ public class ApiException extends RuntimeException {
     public static ApiException forbidden(String why)    { return new ApiException(HttpStatus.FORBIDDEN, why); }
     public static ApiException conflict(String why)     { return new ApiException(HttpStatus.CONFLICT, why); }
     public static ApiException unauthorized(String why) { return new ApiException(HttpStatus.UNAUTHORIZED, why); }
+    public static ApiException internal(String why)     { return new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, why); }
 }

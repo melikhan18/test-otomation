@@ -16,6 +16,12 @@ import com.devicefarm.agent.capture.ScreenCaptureEngine
 import com.devicefarm.agent.capture.ScreenshotEngine
 import com.devicefarm.agent.control.ControlExecutor
 import com.devicefarm.agent.inspect.InspectorEngine
+import com.devicefarm.agent.install.ApkDownloader
+import com.devicefarm.agent.install.ApkInstaller
+import com.devicefarm.agent.install.AppInfoProbe
+import com.devicefarm.agent.install.AppLauncher
+import com.devicefarm.agent.install.DeviceResetService
+import com.devicefarm.agent.install.InstallStatusReceiver
 import com.devicefarm.agent.net.AgentSocket
 import com.devicefarm.agent.net.Frame
 import com.devicefarm.agent.net.FrameType
@@ -54,6 +60,9 @@ class AgentForegroundService : Service() {
         // SecurityException atar.
         startInForeground(buildNotification("Starting…"), dataSyncOnly = true)
         captureEngine = ScreenCaptureEngine(applicationContext, agentSocket)
+        // Wire the PackageInstaller result broadcast bridge so the first APK install
+        // doesn't have to pay the registration latency in its own request path.
+        InstallStatusReceiver.ensureRegistered(applicationContext)
         startInboundDispatcher()
         startConnectionAndHeartbeat()
         observeSocketState()
@@ -160,8 +169,109 @@ class AgentForegroundService : Service() {
             FrameType.HEARTBEAT -> {
                 agentSocket.send(Frame.empty(FrameType.HEARTBEAT))
             }
+            FrameType.APP_INFO_REQUEST       -> handleAppInfoRequest(frame)
+            FrameType.INSTALL_APK_REQUEST    -> handleInstallApkRequest(frame)
+            FrameType.LAUNCH_APP_REQUEST     -> handleLaunchAppRequest(frame)
+            FrameType.RESET_HOME_REQUEST     -> handleResetHomeRequest(frame)
             else -> { /* ignore */ }
         }
+    }
+
+    /* ─────────────────── Faz 3: app/install/launch/reset handlers ──────────── */
+
+    private fun handleAppInfoRequest(frame: Frame) {
+        runCatching {
+            val obj = JSONObject(frame.payloadAsString())
+            val rid = obj.getString("requestId")
+            val pkg = obj.getString("packageName")
+            val info = AppInfoProbe.probe(applicationContext, pkg)
+            val resp = JSONObject().apply {
+                put("requestId", rid)
+                put("installed", info.installed)
+                info.versionCode?.let { put("versionCode", it) }
+                info.versionName?.let { put("versionName", it) }
+            }
+            agentSocket.send(Frame.ofJson(FrameType.APP_INFO_RESPONSE, resp.toString()))
+        }.onFailure { Log.w(TAG, "APP_INFO_REQUEST failed", it) }
+    }
+
+    private fun handleInstallApkRequest(frame: Frame) {
+        // Install can take minutes (large APK + download + commit). Run on a launched
+        // coroutine so we don't block the inbound frame collector — other frames
+        // (heartbeat, screenshot, control) keep flowing during the install.
+        scope.launch {
+            val payloadStr = frame.payloadAsString()
+            val rid = runCatching { JSONObject(payloadStr).optString("requestId", "") }.getOrNull().orEmpty()
+
+            fun respond(status: String, versionCode: Long? = null, errorCode: String? = null, errorMessage: String? = null) {
+                val resp = JSONObject().apply {
+                    put("requestId", rid)
+                    put("status", status)
+                    versionCode?.let { put("installedVersionCode", it) }
+                    errorCode?.let { put("errorCode", it) }
+                    errorMessage?.let { put("errorMessage", it) }
+                }
+                agentSocket.send(Frame.ofJson(FrameType.INSTALL_APK_RESPONSE, resp.toString()))
+            }
+
+            try {
+                val obj = JSONObject(payloadStr)
+                val downloadUrl = obj.getString("downloadUrl")
+                val sha256 = obj.getString("sha256")
+                val expectedVersionCode = obj.getLong("expectedVersionCode")
+                val packageName = obj.getString("packageName")
+
+                Log.i(TAG, "install pkg=$packageName from $downloadUrl (expected vc=$expectedVersionCode)")
+
+                val downloadResult = ApkDownloader.download(applicationContext, downloadUrl, sha256)
+                val apkFile = downloadResult.getOrElse {
+                    Log.w(TAG, "download failed for $packageName", it)
+                    respond("failed", errorCode = "DOWNLOAD_FAILED", errorMessage = it.message)
+                    return@launch
+                }
+
+                val result = ApkInstaller.install(applicationContext, apkFile, packageName, expectedVersionCode)
+                if (result.success) {
+                    respond("ok", versionCode = result.installedVersionCode)
+                } else {
+                    respond("failed", errorCode = result.errorCode, errorMessage = result.errorMessage)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "INSTALL_APK_REQUEST failed", e)
+                respond("failed", errorCode = "EXCEPTION", errorMessage = e.message)
+            }
+        }
+    }
+
+    private fun handleLaunchAppRequest(frame: Frame) {
+        runCatching {
+            val obj = JSONObject(frame.payloadAsString())
+            val rid = obj.getString("requestId")
+            val pkg = obj.getString("packageName")
+            val outcome = AppLauncher.launch(applicationContext, pkg)
+            val resp = JSONObject().apply {
+                put("requestId", rid)
+                put("status", if (outcome.success) "ok" else "failed")
+                outcome.errorMessage?.let { put("errorMessage", it) }
+            }
+            agentSocket.send(Frame.ofJson(FrameType.LAUNCH_APP_RESPONSE, resp.toString()))
+        }.onFailure { Log.w(TAG, "LAUNCH_APP_REQUEST failed", it) }
+    }
+
+    private fun handleResetHomeRequest(frame: Frame) {
+        runCatching {
+            val obj = JSONObject(frame.payloadAsString())
+            val rid = obj.getString("requestId")
+            val pkg = obj.optString("packageName").takeIf { it.isNotEmpty() }
+            val kill = obj.optBoolean("killProcess", false)
+            val outcome = DeviceResetService.reset(applicationContext, pkg, kill)
+            val resp = JSONObject().apply {
+                put("requestId", rid)
+                put("status", if (outcome.success) "ok" else "failed")
+                outcome.errorMessage?.let { put("errorMessage", it) }
+            }
+            agentSocket.send(Frame.ofJson(FrameType.RESET_HOME_RESPONSE, resp.toString()))
+        }.onFailure { Log.w(TAG, "RESET_HOME_REQUEST failed", it) }
     }
 
     private fun observeSocketState() {

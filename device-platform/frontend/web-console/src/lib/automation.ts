@@ -327,6 +327,30 @@ export type RunSummary = {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+  /** Faz 4: target APK reference + prep outcome (null when no app target was set). */
+  targetAppVersionId: number | null;
+  appPrepStatus: AppPrepStatus | null;
+};
+
+/**
+ * Outcome of the pre-test app preparation phase. See {@code RunOrchestrator.runAppPrep}
+ * for the decision matrix.
+ */
+export type AppPrepStatus =
+  | "NOT_REQUESTED"   // run had no targetAppVersionId
+  | "ALREADY_LATEST"  // target version was already installed
+  | "INSTALLED"       // first install on this device
+  | "UPDATED"         // older version was present, replaced
+  | "FAILED";         // probe / install / launch failed (see appPrepError)
+
+/** Denormalised app + version pointer embedded in run views. */
+export type TargetAppRef = {
+  appId: number;
+  packageName: string;
+  displayName: string;
+  versionId: number;
+  versionCode: number;
+  versionName: string | null;
 };
 
 export type StepResultView = {
@@ -370,6 +394,15 @@ export type RunView = {
   tags: string[];
   createdAt: string;
   stepResults: StepResultView[];
+  /* Faz 4 — app prep + reset */
+  targetAppVersionId: number | null;
+  /** Denormalised — null when version was deleted (ON DELETE SET NULL) or never set. */
+  targetApp: TargetAppRef | null;
+  appPrepStatus: AppPrepStatus | null;
+  appPrepDurationMs: number | null;
+  appPrepError: string | null;
+  resetHomeAfter: boolean;
+  killProcessAfter: boolean;
 };
 
 export type RunCreate = {
@@ -380,6 +413,12 @@ export type RunCreate = {
   interStepDelayMs?: number;
   /** When true, poll inspect tree until stable (≤5s) instead of using a fixed delay. */
   adaptiveWait?: boolean;
+  /** Optional target APK; null/undefined skips the app prep phase entirely. */
+  targetAppVersionId?: number | null;
+  /** Press HOME after the run finishes (default true server-side). */
+  resetHomeAfter?: boolean;
+  /** Force-stop the app on reset (only effective on Device Owner cihazda). */
+  killProcessAfter?: boolean;
 };
 
 export const runApi = {
@@ -428,6 +467,8 @@ export type SuiteRunChild = {
   videoUrl: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  /** Faz 4: app prep outcome of this child run. */
+  appPrepStatus: AppPrepStatus | null;
 };
 
 export type SuiteRunView = {
@@ -450,6 +491,11 @@ export type SuiteRunView = {
   tags: string[];
   createdAt: string;
   runs: SuiteRunChild[];
+  /* Faz 4 — applies to every child run in the suite */
+  targetAppVersionId: number | null;
+  targetApp: TargetAppRef | null;
+  resetHomeAfter: boolean;
+  killProcessAfter: boolean;
 };
 
 export type SuiteRunCreate = {
@@ -458,6 +504,10 @@ export type SuiteRunCreate = {
   environment?: string;
   interStepDelayMs?: number;
   adaptiveWait?: boolean;
+  /** Same APK is installed/launched at the start of each child run. */
+  targetAppVersionId?: number | null;
+  resetHomeAfter?: boolean;
+  killProcessAfter?: boolean;
 };
 
 export const suiteRunApi = {

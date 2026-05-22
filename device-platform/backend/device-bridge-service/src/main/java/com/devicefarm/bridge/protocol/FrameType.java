@@ -20,6 +20,24 @@ public final class FrameType {
     /** agent → hub: [4-byte BE metaLen][JSON meta][PNG bytes] */
     public static final byte SCREENSHOT_RESPONSE  = 0x0A;
 
+    // ── Faz 2: APK install + app launch + device reset ─────────────────────
+    /** hub → agent (JSON: {requestId, packageName}) */
+    public static final byte APP_INFO_REQUEST     = 0x0B;
+    /** agent → hub (JSON: {requestId, installed, versionCode?, versionName?}) */
+    public static final byte APP_INFO_RESPONSE    = 0x0C;
+    /** hub → agent (JSON: {requestId, downloadUrl, sha256, expectedVersionCode, packageName}) */
+    public static final byte INSTALL_APK_REQUEST  = 0x0D;
+    /** agent → hub (JSON: {requestId, status: ok|failed, installedVersionCode?, errorCode?, errorMessage?}) */
+    public static final byte INSTALL_APK_RESPONSE = 0x0E;
+    /** hub → agent (JSON: {requestId, packageName}) */
+    public static final byte LAUNCH_APP_REQUEST   = 0x0F;
+    /** agent → hub (JSON: {requestId, status: ok|failed, errorMessage?}) */
+    public static final byte LAUNCH_APP_RESPONSE  = 0x10;
+    /** hub → agent (JSON: {requestId, packageName?, killProcess?}) */
+    public static final byte RESET_HOME_REQUEST   = 0x11;
+    /** agent → hub (JSON: {requestId, status: ok|failed, errorMessage?}) */
+    public static final byte RESET_HOME_RESPONSE  = 0x12;
+
     public static String name(byte t) {
         return switch (t) {
             case VIDEO_KEYFRAME       -> "VIDEO_KEYFRAME";
@@ -32,6 +50,14 @@ public final class FrameType {
             case FORCE_KEYFRAME       -> "FORCE_KEYFRAME";
             case SCREENSHOT_REQUEST   -> "SCREENSHOT_REQUEST";
             case SCREENSHOT_RESPONSE  -> "SCREENSHOT_RESPONSE";
+            case APP_INFO_REQUEST     -> "APP_INFO_REQUEST";
+            case APP_INFO_RESPONSE    -> "APP_INFO_RESPONSE";
+            case INSTALL_APK_REQUEST  -> "INSTALL_APK_REQUEST";
+            case INSTALL_APK_RESPONSE -> "INSTALL_APK_RESPONSE";
+            case LAUNCH_APP_REQUEST   -> "LAUNCH_APP_REQUEST";
+            case LAUNCH_APP_RESPONSE  -> "LAUNCH_APP_RESPONSE";
+            case RESET_HOME_REQUEST   -> "RESET_HOME_REQUEST";
+            case RESET_HOME_RESPONSE  -> "RESET_HOME_RESPONSE";
             default -> "UNKNOWN(" + (t & 0xff) + ")";
         };
     }

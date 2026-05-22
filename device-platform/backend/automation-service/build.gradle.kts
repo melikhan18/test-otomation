@@ -22,5 +22,9 @@ dependencies {
     }
     implementation("software.amazon.awssdk:url-connection-client")
 
+    // APK manifest reader — extracts packageName / versionCode / versionName / label
+    // from uploaded .apk files without invoking aapt2. Pure-Java, no native deps.
+    implementation("net.dongliu:apk-parser:2.6.10")
+
     testImplementation("org.springframework.boot:spring-boot-starter-test")
 }

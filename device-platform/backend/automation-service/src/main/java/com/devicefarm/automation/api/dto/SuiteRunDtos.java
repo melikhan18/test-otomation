@@ -16,7 +16,12 @@ public class SuiteRunDtos {
             /** Forwarded to each child run (sleep between steps; null = server default). */
             Integer interStepDelayMs,
             /** Forwarded to each child run. */
-            Boolean adaptiveWait
+            Boolean adaptiveWait,
+            /** APK version installed once per child run before its first step. */
+            Long targetAppVersionId,
+            /** Forwarded to each child run; defaults to true server-side when null. */
+            Boolean resetHomeAfter,
+            Boolean killProcessAfter
     ) {}
 
     /** Replace the full tag set on a suite-run. Server normalises + caps to 16 tags. */
@@ -60,7 +65,12 @@ public class SuiteRunDtos {
             String errorSummary,
             List<String> tags,
             Instant createdAt,
-            List<ChildRun> runs
+            List<ChildRun> runs,
+            /** ── Faz 4: target app + reset config ────────────────────────── */
+            Long targetAppVersionId,
+            RunDtos.TargetAppRef targetApp,
+            boolean resetHomeAfter,
+            boolean killProcessAfter
     ) {}
 
     /** One child run as it appears under the suite-run aggregation. */
@@ -75,6 +85,8 @@ public class SuiteRunDtos {
             Integer durationMs,
             String videoUrl,
             Instant startedAt,
-            Instant finishedAt
+            Instant finishedAt,
+            /** App prep outcome propagated up from the child run's row. */
+            String appPrepStatus
     ) {}
 }
