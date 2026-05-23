@@ -12,12 +12,14 @@ rootProject.name = "qa-platform"
 include(":common")
 include(":auth-service")
 include(":tenant-service")
+include(":reports-aggregator-service")
 include(":api-gateway")
 
-project(":common").projectDir         = file("shared/common")
-project(":auth-service").projectDir   = file("shared/auth-service")
-project(":tenant-service").projectDir = file("shared/tenant-service")
-project(":api-gateway").projectDir    = file("shared/api-gateway")
+project(":common").projectDir                    = file("shared/common")
+project(":auth-service").projectDir              = file("shared/auth-service")
+project(":tenant-service").projectDir            = file("shared/tenant-service")
+project(":reports-aggregator-service").projectDir = file("shared/reports-aggregator-service")
+project(":api-gateway").projectDir               = file("shared/api-gateway")
 
 // ─── Android platform stack ──────────────────────────────────────────────────
 include(":android-automation-service")

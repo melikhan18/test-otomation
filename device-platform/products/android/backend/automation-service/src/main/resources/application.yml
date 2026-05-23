@@ -37,6 +37,8 @@ app:
       url: ${SVC_SESSION:http://localhost:8083}
     bridge:
       url:    ${SVC_BRIDGE:http://localhost:8084}
+    reports:
+      url:    ${SVC_REPORTS:http://localhost:8090}
   storage:
     # In-cluster URL the service uses to PUT/GET (Docker network DNS or localhost).
     endpoint:    ${MINIO_ENDPOINT:http://localhost:9000}

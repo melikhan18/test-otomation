@@ -63,6 +63,7 @@ public class RunOrchestrator {
     private final ObjectStorage storage;
     private final RunCancellationRegistry cancels;
     private final com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup;
+    private final ReportsPublisher reportsPublisher;
 
     public RunOrchestrator(RunRepository runs, StepResultRepository stepResults,
                            ScenarioRepository scenarios, StepRepository steps,
@@ -71,7 +72,8 @@ public class RunOrchestrator {
                            SessionClient sessions, BridgeClient bridge,
                            ObjectStorage storage,
                            RunCancellationRegistry cancels,
-                           com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup) {
+                           com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup,
+                           ReportsPublisher reportsPublisher) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
@@ -85,6 +87,7 @@ public class RunOrchestrator {
         this.bridge = bridge;
         this.storage = storage;
         this.cancels = cancels;
+        this.reportsPublisher = reportsPublisher;
     }
 
     public void submit(long runId, String userJwt) {
@@ -438,6 +441,7 @@ public class RunOrchestrator {
         fresh.setStatus(anyFailure ? RunStatus.FAILED : RunStatus.PASSED);
         runs.save(fresh);
         log.info("run {} finished: {} ({}p / {}f)", run.getId(), fresh.getStatus(), passed, failed);
+        reportsPublisher.publishAsync(run.getId());
     }
 
     /**
@@ -473,6 +477,7 @@ public class RunOrchestrator {
         runs.save(fresh);
         log.info("run {} cancelled by user ({}p / {}f / {} steps total)",
                 run.getId(), passed, failed, results.size());
+        reportsPublisher.publishAsync(run.getId());
     }
 
     @Transactional
@@ -486,6 +491,7 @@ public class RunOrchestrator {
             }
             runs.save(run);
         });
+        reportsPublisher.publishAsync(runId);
     }
 
     /* ───────────────────────  screenshot capture  ────────────────── */

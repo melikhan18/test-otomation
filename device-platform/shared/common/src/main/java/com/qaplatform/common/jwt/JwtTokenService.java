@@ -118,6 +118,24 @@ public class JwtTokenService {
         ));
     }
 
+    /**
+     * Service-to-service token. Used for internal calls between backend
+     * services (e.g. android-automation-service pushing run summaries to
+     * reports-aggregator-service). Carries {@code role=SERVICE} and
+     * {@code platformAdmin=true} so downstream authorization can short-circuit
+     * the user-only checks.
+     *
+     * <p>TTL matches the user access token — same renewal cadence, no
+     * separate refresh dance required since the caller can re-mint at will.</p>
+     */
+    public String issueServiceToken(String serviceName) {
+        return issue("service:" + serviceName, props.getAccessTokenTtl(), Map.of(
+                "role", "SERVICE",
+                "platformAdmin", true,
+                "serviceName", serviceName
+        ));
+    }
+
     private String issue(String subject, Duration ttl, Map<String, Object> claims) {
         Instant now = Instant.now();
         return Jwts.builder()
