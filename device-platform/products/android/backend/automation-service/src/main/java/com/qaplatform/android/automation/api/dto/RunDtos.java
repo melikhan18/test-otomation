@@ -1,8 +1,8 @@
 package com.qaplatform.android.automation.api.dto;
 
-import com.qaplatform.android.automation.domain.RunStatus;
 import com.qaplatform.android.automation.domain.StepAction;
-import com.qaplatform.android.automation.domain.StepResultStatus;
+import com.qaplatform.common.runengine.status.RunStatus;
+import com.qaplatform.common.runengine.status.StepResultStatus;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
