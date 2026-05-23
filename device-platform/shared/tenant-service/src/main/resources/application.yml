@@ -1,0 +1,38 @@
+server:
+  port: 8089
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: tenant-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:device_platform}
+    username: ${DB_USER:dp}
+    password: ${DB_PASSWORD:dp_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: tenant
+        jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    default-schema: tenant
+    schemas: tenant
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
+    issuer: device-platform
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    com.qaplatform: DEBUG

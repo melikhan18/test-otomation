@@ -33,6 +33,12 @@ spring:
           uri: ${SVC_AUTH:http://localhost:8081}
           predicates:
             - Path=/api/admin/**
+        # Tenant-service (F5) — owns project_platforms (which platforms are
+        # enabled on a project). Platform-agnostic; no X-Platform predicate.
+        - id: tenancy
+          uri: ${SVC_TENANT:http://localhost:8089}
+          predicates:
+            - Path=/api/tenancy/**
 
         # ── Android platform stack ─────────────────────────────────────────────
         #
