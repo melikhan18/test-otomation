@@ -10,6 +10,14 @@ name: device-platform
 # Port bindings honour the *_BIND env vars: in dev they default to `0.0.0.0`
 # (so host tools can reach DB/MinIO directly); in prod set them to `127.0.0.1`
 # so only the host (and the nginx reverse proxy on it) can connect.
+#
+# Backend layout (F1+):
+#   - Shared kernel:        shared/{api-gateway,auth-service,common}
+#   - Android platform:     products/android/backend/{automation,device,session,device-bridge}-service
+# The root Dockerfile takes two build args:
+#   SERVICE       — Gradle module short name (also used for the bootJar task)
+#   SERVICE_PATH  — filesystem path of the module's projectDir, so the COPY
+#                   in the runtime stage can grab the right build/libs/*.jar.
 
 x-service-env: &service-env
   DB_HOST: postgres
@@ -102,11 +110,14 @@ services:
       "
     restart: "no"
 
+  # ── Shared kernel ────────────────────────────────────────────────────────────
   auth-service:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: auth-service
+        SERVICE_PATH: shared/auth-service
     environment:
       <<: *service-env
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -128,11 +139,40 @@ services:
       retries: 20
       start_period: 30s
 
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: api-gateway
+        SERVICE_PATH: shared/api-gateway
+    environment:
+      <<: *service-env
+      SVC_AUTH:       http://auth-service:8081
+      SVC_DEVICE:     http://device-service:8082
+      SVC_SESSION:    http://session-service:8083
+      SVC_BRIDGE:     http://device-bridge-service:8084
+      SVC_BRIDGE_WS:  ws://device-bridge-service:8084
+      SVC_AUTOMATION: http://automation-service:8085
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
+    depends_on:
+      - auth-service
+      - device-service
+      - session-service
+      - device-bridge-service
+      - automation-service
+    ports:
+      - "${GATEWAY_BIND:-0.0.0.0}:8080:8080"
+    restart: unless-stopped
+
+  # ── Android platform stack ────────────────────────────────────────────────────
   device-service:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: device-service
+        SERVICE_PATH: products/android/backend/device-service
     environment:
       <<: *service-env
       # Spring relaxed-binding: APP_BRIDGE_PUBLIC_WS_URL → app.bridge.public-ws-url
@@ -154,9 +194,11 @@ services:
 
   session-service:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: session-service
+        SERVICE_PATH: products/android/backend/session-service
     environment:
       <<: *service-env
     depends_on:
@@ -174,9 +216,11 @@ services:
 
   device-bridge-service:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: device-bridge-service
+        SERVICE_PATH: products/android/backend/device-bridge-service
     environment:
       <<: *service-env
     depends_on:
@@ -193,9 +237,11 @@ services:
 
   automation-service:
     build:
-      context: ./backend
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: automation-service
+        SERVICE_PATH: products/android/backend/automation-service
     environment:
       <<: *service-env
       SVC_SESSION: http://session-service:8083
@@ -219,30 +265,6 @@ services:
       timeout: 3s
       retries: 20
       start_period: 30s
-
-  api-gateway:
-    build:
-      context: ./backend
-      args:
-        SERVICE: api-gateway
-    environment:
-      <<: *service-env
-      SVC_AUTH:       http://auth-service:8081
-      SVC_DEVICE:     http://device-service:8082
-      SVC_SESSION:    http://session-service:8083
-      SVC_BRIDGE:     http://device-bridge-service:8084
-      SVC_BRIDGE_WS:  ws://device-bridge-service:8084
-      SVC_AUTOMATION: http://automation-service:8085
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
-    depends_on:
-      - auth-service
-      - device-service
-      - session-service
-      - device-bridge-service
-      - automation-service
-    ports:
-      - "${GATEWAY_BIND:-0.0.0.0}:8080:8080"
-    restart: unless-stopped
 
   # ── Web console + reverse proxy (production only) ───────────────────────────
   # Single Caddy container does two jobs:
