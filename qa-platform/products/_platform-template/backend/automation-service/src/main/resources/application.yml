@@ -1,0 +1,54 @@
+server:
+  # TODO: pick a free port. Known allocations live in docs/architecture.md.
+  port: 8099
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: _template-automation-service       # TODO: rename to {platform}-automation-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:qa_platform}
+    username: ${DB_USER:dp}
+    password: ${DB_PASSWORD:dp_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: _template_automation # TODO: rename to {platform}_automation
+        jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    default-schema: _template_automation     # TODO: same rename
+    schemas: _template_automation            # TODO: same rename
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
+    issuer: qa-platform
+  services:
+    # Reports aggregator — every platform's automation-service should publish
+    # terminal-run summaries here so the cross-platform dashboard sees them.
+    reports:
+      url: ${SVC_REPORTS:http://localhost:8090}
+  # ── Platform-specific upstream services go here ───────────────────────
+  # e.g. for a device-bound platform:
+  #   session:
+  #     url: ${SVC_{PLATFORM}_SESSION:http://localhost:NNNN}
+  #   bridge:
+  #     url: ${SVC_{PLATFORM}_BRIDGE:http://localhost:NNNN}
+  # ──────────────────────────────────────────────────────────────────────
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.qaplatform: DEBUG

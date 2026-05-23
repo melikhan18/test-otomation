@@ -1,0 +1,158 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      httpserver:
+        wiretap: false
+      httpclient:
+        websocket:
+          # Default is 64 KB which truncates H.264 keyframes. Match the bridge ceiling.
+          max-frame-payload-length: 10485760
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
+      routes:
+        # ── Shared kernel (X-Platform irrelevant) ──────────────────────────────
+        - id: auth
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/**
+        # Tenancy management endpoints live in auth-service.
+        - id: companies
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/companies/**
+        - id: notifications
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/notifications/**
+        - id: admin-users
+          uri: ${SVC_AUTH:http://localhost:8081}
+          predicates:
+            - Path=/api/admin/**
+        # Tenant-service (F5) — owns project_platforms (which platforms are
+        # enabled on a project). Platform-agnostic; no X-Platform predicate.
+        - id: tenancy
+          uri: ${SVC_TENANT:http://localhost:8089}
+          predicates:
+            - Path=/api/tenancy/**
+        # Reports aggregator (F7) — cross-platform run rollup. Push from
+        # platform stacks + read for the dashboard. Platform-agnostic.
+        - id: reports
+          uri: ${SVC_REPORTS:http://localhost:8090}
+          predicates:
+            - Path=/api/reports/**
+
+        # ── Android platform stack ─────────────────────────────────────────────
+        #
+        # New (F3+) route surface: clients use platform-agnostic paths like
+        # /api/runs/123 and identify the target platform via the X-Platform
+        # header. The gateway dispatches to the matching backend stack — same
+        # underlying service today (Android only), but the contract is open for
+        # iOS / Backend / Web stacks to slot in without touching the client.
+        #
+        # During F3 we also keep the legacy /api/automation/** path mapped to
+        # the Android automation-service so the existing frontend keeps working
+        # while F4 migrates it to the platform-agnostic URLs.
+        - id: android-devices
+          uri: ${SVC_DEVICE:http://localhost:8082}
+          predicates:
+            - Path=/api/devices/**,/api/agent/**
+            - Header=X-Platform, ANDROID
+        - id: android-sessions
+          uri: ${SVC_SESSION:http://localhost:8083}
+          predicates:
+            - Path=/api/sessions/**
+            - Header=X-Platform, ANDROID
+        - id: android-bridge-http
+          uri: ${SVC_BRIDGE:http://localhost:8084}
+          predicates:
+            - Path=/api/bridge/**
+            - Header=X-Platform, ANDROID
+
+        # Automation resources — platform-agnostic paths with header dispatch.
+        # The backend still serves /api/automation/{resource}; we RewritePath
+        # to translate /api/{resource}/** → /api/automation/{resource}/** for
+        # now. F-future can drop the rewrite when backend controller paths
+        # are themselves platform-agnostic.
+        - id: android-automation-resources
+          uri: ${SVC_AUTOMATION:http://localhost:8085}
+          predicates:
+            - Path=/api/scenarios/**,/api/suites/**,/api/apps/**,/api/elements/**,/api/test-data/**,/api/runs/**,/api/suite-runs/**,/api/workspace/**
+            - Header=X-Platform, ANDROID
+          filters:
+            - RewritePath=/api/(?<seg>scenarios|suites|apps|elements|test-data|runs|suite-runs|workspace)(?<rest>/?.*), /api/automation/${seg}${rest}
+
+        # ── WebSocket (path-based — browsers can't set custom headers on WS) ──
+        - id: bridge-ws
+          uri: ${SVC_BRIDGE_WS:ws://localhost:8084}
+          predicates:
+            - Path=/ws/**
+
+        # ── Legacy compatibility (deprecated — frontend still uses these
+        #    until F4 migrates it to /api/{resource} + X-Platform header) ──────
+        - id: legacy-devices
+          uri: ${SVC_DEVICE:http://localhost:8082}
+          predicates:
+            - Path=/api/devices/**,/api/agent/**
+        - id: legacy-sessions
+          uri: ${SVC_SESSION:http://localhost:8083}
+          predicates:
+            - Path=/api/sessions/**
+        - id: legacy-bridge-http
+          uri: ${SVC_BRIDGE:http://localhost:8084}
+          predicates:
+            - Path=/api/bridge/**
+        - id: legacy-automation
+          uri: ${SVC_AUTOMATION:http://localhost:8085}
+          predicates:
+            - Path=/api/automation/**
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            # Comma-separated list of allowed origin patterns. Override via
+            # `CORS_ALLOWED_ORIGINS` env var in production — set to your exact
+            # console domain(s), e.g. "https://console.example.com". Wildcards
+            # are accepted (Spring CORS pattern semantics) but should be avoided
+            # in prod.
+            allowed-origin-patterns: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowed-headers:
+              - "*"
+            # CORS preflight needs to know X-Platform is an accepted custom header.
+            # "*" above covers it for non-credentialed requests, but allow-credentials
+            # forces exact listing — Spring expands "*" itself, but listing the
+            # known custom headers helps with restrictive CORS proxies in front.
+            exposed-headers:
+              - Authorization
+              - X-Platform
+              - X-Company-Id
+              - X-Project-Id
+            allow-credentials: true
+            max-age: 3600
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
+    issuer: qa-platform
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+
+logging:
+  level:
+    com.qaplatform: DEBUG
+    org.springframework.cloud.gateway: INFO
