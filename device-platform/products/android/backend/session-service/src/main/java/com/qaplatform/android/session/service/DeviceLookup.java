@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 /**
- * Cross-schema read-only view of {@code device.devices}. Used by SessionService to
- * answer "which company owns this device, and is it restricted?" without pulling
+ * Cross-schema read-only view of {@code android_device.devices}. Used by SessionService
+ * to answer "which company owns this device, and is it restricted?" without pulling
  * android-device-service's JPA entities into the android-session-service module.
  *
  * Cached per-device since the company assignment never changes after enrollment.
@@ -28,7 +28,7 @@ public class DeviceLookup {
         Info cached = cache.get(deviceId);
         if (cached != null) return Optional.of(cached);
         var rows = jdbc.queryForList(
-                "SELECT id, company_id, restricted FROM device.devices WHERE id = ?", deviceId);
+                "SELECT id, company_id, restricted FROM android_device.devices WHERE id = ?", deviceId);
         if (rows.isEmpty()) return Optional.empty();
         var row = rows.get(0);
         Long companyId = row.get("company_id") == null ? null : ((Number) row.get("company_id")).longValue();
@@ -41,7 +41,7 @@ public class DeviceLookup {
     /** Project ids whitelisted for a restricted device. Empty for unrestricted devices. */
     public java.util.List<Long> projectAccess(long deviceId) {
         return jdbc.query(
-                "SELECT project_id FROM device.device_project_access WHERE device_id = ?",
+                "SELECT project_id FROM android_device.device_project_access WHERE device_id = ?",
                 (rs, i) -> rs.getLong(1),
                 deviceId);
     }
