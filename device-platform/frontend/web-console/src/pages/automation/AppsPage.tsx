@@ -60,6 +60,8 @@ export default function AppsPage() {
   const create = useMutation({
     mutationFn: (body: AppCreate) => appApi.create(body),
     onSuccess: (a) => {
+      // Prefix match: invalidates ["automation-apps", projectId] across every project
+      // we may have cached. Same prefix is used by the TargetAppPicker's app list.
       qc.invalidateQueries({ queryKey: ["automation-apps"] });
       setSelectedId(a.id);
       setCreating(false);
@@ -69,8 +71,11 @@ export default function AppsPage() {
   });
   const archive = useMutation({
     mutationFn: (id: number) => appApi.archive(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ["automation-apps"] });
+      // Also drop the per-app detail cache so a stale archived view doesn't linger
+      // if the user re-selects the same id (e.g. via deep link).
+      qc.invalidateQueries({ queryKey: ["automation-app", id] });
       setConfirmArchive(null);
     },
   });

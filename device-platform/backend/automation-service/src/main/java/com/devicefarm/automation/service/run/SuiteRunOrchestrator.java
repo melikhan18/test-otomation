@@ -232,7 +232,9 @@ public class SuiteRunOrchestrator {
             suiteRuns.save(sr);
             log.info("suite run {} cancelled by user ({}p / {}f so far)", suiteRunId, passed, failed);
         });
-        suiteCancels.clear(suiteRunId);
+        // Note: the cancel flag is already cleared in submit()'s outer finally block —
+        // a second clear here was a duplicate and would mask any future caller that
+        // forgot the outer cleanup.
     }
 
     @Transactional

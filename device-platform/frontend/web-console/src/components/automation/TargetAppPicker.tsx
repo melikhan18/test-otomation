@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Package } from "lucide-react";
 import { appApi, type AppSummary } from "@/lib/apps";
+import { useAuthStore } from "@/store/auth";
 
 type Props = {
   /** Selected app version, or null when the user wants to skip app prep entirely. */
@@ -29,14 +30,24 @@ export default function TargetAppPicker({
   killProcessAfter, onKillProcessAfterChange,
 }: Props) {
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
+  // Match AppsPage's keying: project-scoped so switching workspaces invalidates
+  // the cache instead of accidentally showing another project's apps to the
+  // picker. (AppsPage uses ["automation-apps", projectId] too — the prefix
+  // match in invalidateQueries({ queryKey: ["automation-apps"] }) catches both.)
+  const activeProjectId = useAuthStore((s) => s.activeProjectId);
 
   const appsQ = useQuery({
-    queryKey: ["automation-apps"],
+    queryKey: ["automation-apps", activeProjectId ?? null],
     queryFn: appApi.list,
     refetchOnWindowFocus: false,
+    enabled: activeProjectId != null,
   });
   const appDetailQ = useQuery({
-    queryKey: ["automation-app", selectedAppId ?? -1],
+    // No `?? -1` fallback — the `enabled` gate below prevents the queryFn from
+    // running while selectedAppId is null. The synthetic -1 key was only ever a
+    // cache placeholder for an id that doesn't exist; dropping it keeps the
+    // cache map clean.
+    queryKey: ["automation-app", selectedAppId],
     queryFn: () => appApi.get(selectedAppId!),
     enabled: selectedAppId != null,
     refetchOnWindowFocus: false,

@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -sv -o /dev/null -H \"Upgrade: websocket\" -H \"Connection: Upgrade\" -H \"Sec-WebSocket-Version: 13\" -H \"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\" \"http://localhost:8080/ws/agent?token=invalid\")"
+      "Bash(curl -sv -o /dev/null -H \"Upgrade: websocket\" -H \"Connection: Upgrade\" -H \"Sec-WebSocket-Version: 13\" -H \"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\" \"http://localhost:8080/ws/agent?token=invalid\")",
+      "Bash(cd /c/Users/melik/Desktop/test-otomation/device-platform/backend && find . -type f -name \"*.java\" | grep -E \"\\(common|api-gateway|auth-service|device-service|session-service\\)\" | wc -l)",
+      "Bash(xargs grep -l \"secret\\\\|password\")"
     ]
   }
 }

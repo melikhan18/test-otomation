@@ -10,6 +10,7 @@ import com.devicefarm.device.domain.DeviceRepository;
 import com.devicefarm.device.domain.EnrollmentToken;
 import com.devicefarm.device.domain.EnrollmentTokenRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,22 +68,45 @@ public class EnrollmentService {
         if (et.getUsedAt() != null) throw ApiException.unauthorized("enrollment token already used");
         if (et.getExpiresAt().isBefore(Instant.now())) throw ApiException.unauthorized("enrollment token expired");
 
-        // Prefer company-scoped lookup; falls back to legacy productId for tokens
-        // minted before V2 backfill made the column non-null.
         Long companyId = et.getCompanyId();
-        Device device = (companyId != null
-                ? devices.findByCompanyIdAndSerial(companyId, req.serial())
-                : devices.findByProductIdAndSerial(et.getProductId(), req.serial()))
-                .map(existing -> existing)
-                .orElseGet(() -> devices.save(new Device(
-                        et.getProductId(), companyId, req.serial(), req.manufacturer(), req.model(),
-                        req.androidVersion(), req.screenWidth(), req.screenHeight(), req.agentVersion())));
+        Device device = findOrCreateDevice(et, companyId, req);
 
         device.touchLastSeen();
         et.markUsed(device.getId());
 
         String agentToken = jwt.issueAgentToken(device.getId(), device.getProductId());
         return new DeviceDtos.EnrollResponse(device.getId(), device.getProductId(), agentToken, wsUrl);
+    }
+
+    /**
+     * Find existing device by (company, serial) or insert a new one. The lookup +
+     * insert is a classic find-or-create race: two concurrent enrolls of the same
+     * serial both pass the initial {@code findByCompanyIdAndSerial} check and try
+     * to insert. The V3 partial unique index {@code uniq_devices_company_serial}
+     * catches the second insert with a {@link DataIntegrityViolationException};
+     * we recover by re-fetching the row the first caller created.
+     *
+     * <p>Falls back to legacy productId lookup for tokens minted before V2 (when
+     * {@code company_id} was nullable during the backfill grace period).</p>
+     */
+    private Device findOrCreateDevice(EnrollmentToken et, Long companyId, DeviceDtos.EnrollRequest req) {
+        var existing = companyId != null
+                ? devices.findByCompanyIdAndSerial(companyId, req.serial())
+                : devices.findByProductIdAndSerial(et.getProductId(), req.serial());
+        if (existing.isPresent()) return existing.get();
+
+        Device fresh = new Device(
+                et.getProductId(), companyId, req.serial(), req.manufacturer(), req.model(),
+                req.androidVersion(), req.screenWidth(), req.screenHeight(), req.agentVersion());
+        try {
+            return devices.save(fresh);
+        } catch (DataIntegrityViolationException race) {
+            // Another concurrent enroll won the insert. Re-fetch and continue with that row.
+            return (companyId != null
+                    ? devices.findByCompanyIdAndSerial(companyId, req.serial())
+                    : devices.findByProductIdAndSerial(et.getProductId(), req.serial()))
+                    .orElseThrow(() -> race);  // Should never happen — re-throw the original to aid debugging.
+        }
     }
 
     private static String generateOpaqueToken() {

@@ -15,10 +15,23 @@ import java.util.concurrent.ConcurrentHashMap
  * {@link CompletableDeferred} the {@link ApkInstaller} suspended on. Concurrent installs
  * are demultiplexed by {@code sessionId}.
  *
- * <p>Lifecycle: lazily registered on first use via {@link #ensureRegistered}; never
- * unregistered (process-bound, cheap). Manifest declaration would also work but a
- * runtime receiver lets us keep the receiver flag {@code RECEIVER_NOT_EXPORTED} cleanly
- * across API levels without an extra manifest attribute.</p>
+ * <h2>Lifecycle (intentional — not a leak)</h2>
+ * <p>Registered against {@code context.applicationContext} via {@link #ensureRegistered}
+ * the first time anyone needs install broadcasts, and <strong>never unregistered</strong>.
+ * This is deliberate:</p>
+ * <ul>
+ *   <li>Application context lives for the whole process. Receiver weight is a single
+ *       BroadcastReceiver instance + a {@code ConcurrentHashMap} — bytes, not megabytes.</li>
+ *   <li>{@code ensureRegistered} is idempotent (volatile flag + synchronized) so calling
+ *       it multiple times across the process is safe; no duplicate registrations.</li>
+ *   <li>The agent's process is long-lived (foreground service). If Android tears the
+ *       process down for memory pressure, our receiver dies with it — no leak.</li>
+ *   <li>Manifest declaration would also work, but a runtime receiver lets us use
+ *       {@code RECEIVER_NOT_EXPORTED} cleanly across API levels without an extra
+ *       manifest attribute.</li>
+ * </ul>
+ * <p>Static analyzers may flag this as "receiver not unregistered"; ignore the warning,
+ * the lifecycle is correct.</p>
  */
 object InstallStatusReceiver : BroadcastReceiver() {
 
