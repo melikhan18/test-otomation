@@ -139,6 +139,30 @@ services:
       retries: 20
       start_period: 30s
 
+  tenant-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: tenant-service
+        SERVICE_PATH: shared/tenant-service
+    environment:
+      <<: *service-env
+    depends_on:
+      postgres:     { condition: service_healthy }
+      # tenant.V1 backfills from auth.projects — wait for auth-service to finish
+      # its V3 tenancy migration.
+      auth-service: { condition: service_healthy }
+    ports:
+      - "${TENANT_BIND:-0.0.0.0}:8089:8089"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8089/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
   api-gateway:
     build:
       context: .
@@ -149,6 +173,7 @@ services:
     environment:
       <<: *service-env
       SVC_AUTH:       http://auth-service:8081
+      SVC_TENANT:     http://tenant-service:8089
       SVC_DEVICE:     http://android-device-service:8082
       SVC_SESSION:    http://android-session-service:8083
       SVC_BRIDGE:     http://android-bridge-service:8084
@@ -157,6 +182,7 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
     depends_on:
       - auth-service
+      - tenant-service
       - android-device-service
       - android-session-service
       - android-bridge-service
