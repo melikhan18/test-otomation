@@ -40,10 +40,15 @@ const DeviceVideoPlayer = forwardRef<DeviceVideoPlayerHandle, Props>(function De
   }), []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    // Guard + bind to non-null aliases so the long-lived WS / decoder callbacks
+    // below don't need to re-prove the canvas is mounted. useEffect only runs
+    // after the canvas element is in the DOM, so a null ref here means a
+    // truly broken render — bail.
+    if (!canvasRef.current) return;
+    const canvas: HTMLCanvasElement = canvasRef.current;
+    const ctxOrNull = canvas.getContext("2d");
+    if (!ctxOrNull) return;
+    const ctx: CanvasRenderingContext2D = ctxOrNull;
 
     let unmounted = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;

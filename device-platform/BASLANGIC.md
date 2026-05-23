@@ -1,6 +1,8 @@
-# Device Platform — Başlangıç Kılavuzu
+# QA Platform — Başlangıç Kılavuzu
 
 Bu kılavuz projeyi sıfırdan çalıştırıp ilk cihazını bağlayıp web'den kontrol etmen için yeterli.
+
+> Repo dizini hâlâ `device-platform/` — multi-platform refactor (F0–F8) bittikten sonra `qa-platform/` olarak yeniden adlandırılacak.
 
 ---
 
@@ -30,10 +32,8 @@ Bu kılavuz projeyi sıfırdan çalıştırıp ilk cihazını bağlayıp web'den
 ```powershell
 cd C:\Users\melik\Desktop\test-otomation\device-platform
 
-# 2.1 — Backend Gradle wrapper'ını oluştur (bir defa)
-cd backend
-gradle wrapper --gradle-version=8.10
-cd ..
+# 2.1 — Backend Gradle wrapper'ı zaten repo köküne commit edilmiş.
+#        İlk kez kurulumda ekstra bir şey yapmana gerek yok; .\gradlew.bat direkt çalışır.
 
 # 2.2 — Frontend bağımlılıklarını kur
 cd frontend\web-console
@@ -69,19 +69,20 @@ curl http://localhost:8080/actuator/health   # gateway
 ### Mod B: "Geliştirme" — Sadece altyapı Docker'da, servisler IDE'den
 
 ```powershell
-# Sadece postgres + redis
-docker compose -f deploy\docker-compose\infrastructure.yml up -d
+# Sadece postgres + redis + minio (uygulama servisleri host'tan)
+docker compose up -d postgres redis minio minio-init
 
-# 5 servisi paralel başlat (her biri ayrı terminalde)
-cd backend
+# Backend servisleri (her biri ayrı terminalde, repo kökünden)
 .\gradlew.bat :auth-service:bootRun
-.\gradlew.bat :device-service:bootRun
-.\gradlew.bat :session-service:bootRun
-.\gradlew.bat :device-bridge-service:bootRun
+.\gradlew.bat :tenant-service:bootRun
+.\gradlew.bat :android-device-service:bootRun
+.\gradlew.bat :android-session-service:bootRun
+.\gradlew.bat :android-bridge-service:bootRun
+.\gradlew.bat :android-automation-service:bootRun
 .\gradlew.bat :api-gateway:bootRun
 ```
 
-Veya **IntelliJ IDEA**: `backend/` klasörünü Gradle projesi olarak aç → her servisteki `*Application.java` üzerinde sağ tık → Run.
+Veya **IntelliJ IDEA**: repo kökünü Gradle projesi olarak aç → her servisteki `*Application.java` üzerinde sağ tık → Run.
 
 Frontend:
 ```powershell
@@ -196,8 +197,8 @@ docker compose logs -f auth-service
 
 # Postgres'e bağlan
 docker exec -it $(docker compose ps -q postgres) psql -U dp -d device_platform
-# > \dn         (şemaları listele)
-# > select * from device.devices;
+# > \dn         (şemaları listele — auth / tenant / android_device / android_session / android_automation)
+# > select * from android_device.devices;
 
 # Redis'e bağlan
 docker exec -it $(docker compose ps -q redis) redis-cli
