@@ -163,6 +163,27 @@ services:
       retries: 20
       start_period: 30s
 
+  reports-aggregator-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: reports-aggregator-service
+        SERVICE_PATH: shared/reports-aggregator-service
+    environment:
+      <<: *service-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports:
+      - "${REPORTS_BIND:-0.0.0.0}:8090:8090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8090/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
   api-gateway:
     build:
       context: .
@@ -174,6 +195,7 @@ services:
       <<: *service-env
       SVC_AUTH:       http://auth-service:8081
       SVC_TENANT:     http://tenant-service:8089
+      SVC_REPORTS:    http://reports-aggregator-service:8090
       SVC_DEVICE:     http://android-device-service:8082
       SVC_SESSION:    http://android-session-service:8083
       SVC_BRIDGE:     http://android-bridge-service:8084
@@ -183,6 +205,7 @@ services:
     depends_on:
       - auth-service
       - tenant-service
+      - reports-aggregator-service
       - android-device-service
       - android-session-service
       - android-bridge-service
@@ -272,6 +295,7 @@ services:
       <<: *service-env
       SVC_SESSION: http://android-session-service:8083
       SVC_BRIDGE:  http://android-bridge-service:8084
+      SVC_REPORTS: http://reports-aggregator-service:8090
       RETENTION_ENABLED: ${RETENTION_ENABLED:-true}
       RETENTION_DAYS:    ${RETENTION_DAYS:-30}
       RETENTION_CRON:    ${RETENTION_CRON:-0 0 3 * * *}

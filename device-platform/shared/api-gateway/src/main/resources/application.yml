@@ -39,6 +39,12 @@ spring:
           uri: ${SVC_TENANT:http://localhost:8089}
           predicates:
             - Path=/api/tenancy/**
+        # Reports aggregator (F7) — cross-platform run rollup. Push from
+        # platform stacks + read for the dashboard. Platform-agnostic.
+        - id: reports
+          uri: ${SVC_REPORTS:http://localhost:8090}
+          predicates:
+            - Path=/api/reports/**
 
         # ── Android platform stack ─────────────────────────────────────────────
         #
