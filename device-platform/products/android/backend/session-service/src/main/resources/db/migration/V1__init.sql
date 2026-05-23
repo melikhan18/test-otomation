@@ -1,4 +1,4 @@
-CREATE TABLE session.sessions (
+CREATE TABLE android_session.sessions (
     id          BIGSERIAL PRIMARY KEY,
     device_id   BIGINT       NOT NULL,
     user_id     BIGINT       NOT NULL,
@@ -7,7 +7,7 @@ CREATE TABLE session.sessions (
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     ended_at    TIMESTAMPTZ
 );
-CREATE INDEX idx_sessions_user    ON session.sessions(user_id);
-CREATE INDEX idx_sessions_device  ON session.sessions(device_id);
-CREATE INDEX idx_sessions_product ON session.sessions(product_id);
-CREATE INDEX idx_sessions_active  ON session.sessions(status) WHERE status = 'ACTIVE';
+CREATE INDEX idx_sessions_user    ON android_session.sessions(user_id);
+CREATE INDEX idx_sessions_device  ON android_session.sessions(device_id);
+CREATE INDEX idx_sessions_product ON android_session.sessions(product_id);
+CREATE INDEX idx_sessions_active  ON android_session.sessions(status) WHERE status = 'ACTIVE';

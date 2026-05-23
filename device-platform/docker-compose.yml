@@ -149,29 +149,29 @@ services:
     environment:
       <<: *service-env
       SVC_AUTH:       http://auth-service:8081
-      SVC_DEVICE:     http://device-service:8082
-      SVC_SESSION:    http://session-service:8083
-      SVC_BRIDGE:     http://device-bridge-service:8084
-      SVC_BRIDGE_WS:  ws://device-bridge-service:8084
-      SVC_AUTOMATION: http://automation-service:8085
+      SVC_DEVICE:     http://android-device-service:8082
+      SVC_SESSION:    http://android-session-service:8083
+      SVC_BRIDGE:     http://android-bridge-service:8084
+      SVC_BRIDGE_WS:  ws://android-bridge-service:8084
+      SVC_AUTOMATION: http://android-automation-service:8085
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
     depends_on:
       - auth-service
-      - device-service
-      - session-service
-      - device-bridge-service
-      - automation-service
+      - android-device-service
+      - android-session-service
+      - android-bridge-service
+      - android-automation-service
     ports:
       - "${GATEWAY_BIND:-0.0.0.0}:8080:8080"
     restart: unless-stopped
 
   # ── Android platform stack ────────────────────────────────────────────────────
-  device-service:
+  android-device-service:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        SERVICE: device-service
+        SERVICE: android-device-service
         SERVICE_PATH: products/android/backend/device-service
     environment:
       <<: *service-env
@@ -192,12 +192,12 @@ services:
       retries: 20
       start_period: 30s
 
-  session-service:
+  android-session-service:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        SERVICE: session-service
+        SERVICE: android-session-service
         SERVICE_PATH: products/android/backend/session-service
     environment:
       <<: *service-env
@@ -214,12 +214,12 @@ services:
       retries: 20
       start_period: 30s
 
-  device-bridge-service:
+  android-bridge-service:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        SERVICE: device-bridge-service
+        SERVICE: android-bridge-service
         SERVICE_PATH: products/android/backend/device-bridge-service
     environment:
       <<: *service-env
@@ -235,17 +235,17 @@ services:
       retries: 20
       start_period: 30s
 
-  automation-service:
+  android-automation-service:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        SERVICE: automation-service
+        SERVICE: android-automation-service
         SERVICE_PATH: products/android/backend/automation-service
     environment:
       <<: *service-env
-      SVC_SESSION: http://session-service:8083
-      SVC_BRIDGE:  http://device-bridge-service:8084
+      SVC_SESSION: http://android-session-service:8083
+      SVC_BRIDGE:  http://android-bridge-service:8084
       RETENTION_ENABLED: ${RETENTION_ENABLED:-true}
       RETENTION_DAYS:    ${RETENTION_DAYS:-30}
       RETENTION_CRON:    ${RETENTION_CRON:-0 0 3 * * *}
@@ -253,8 +253,8 @@ services:
       postgres: { condition: service_healthy }
       # automation.V10 reads auth.companies/projects for backfill — wait for V3.
       auth-service:          { condition: service_healthy }
-      session-service:       { condition: service_started }
-      device-bridge-service: { condition: service_started }
+      android-session-service:       { condition: service_started }
+      android-bridge-service: { condition: service_started }
       minio:                 { condition: service_healthy }
     ports:
       - "${AUTOMATION_BIND:-0.0.0.0}:8085:8085"

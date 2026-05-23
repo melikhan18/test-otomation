@@ -5,7 +5,7 @@ spring:
   codec:
     max-in-memory-size: 10MB
   application:
-    name: device-bridge-service
+    name: android-bridge-service
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -36,5 +36,5 @@ management:
 
 logging:
   level:
-    com.devicefarm: DEBUG
+    com.qaplatform: DEBUG
     reactor.netty: INFO

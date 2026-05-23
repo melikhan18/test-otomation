@@ -9,7 +9,7 @@
 -- │  Sadece project_id ile scoped — V10 sonrası mimari project-       │
 -- │  centric olduğu için legacy product_id kolonu yok.                 │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.apps (
+CREATE TABLE android_automation.apps (
     id                BIGSERIAL    PRIMARY KEY,
     project_id        BIGINT       NOT NULL,
     package_name      VARCHAR(255) NOT NULL,                     -- ör. com.example.app
@@ -22,11 +22,11 @@ CREATE TABLE automation.apps (
     archived_at       TIMESTAMPTZ,                                -- soft delete; retention job temizler
     UNIQUE (project_id, package_name)
 );
-CREATE INDEX idx_apps_project ON automation.apps(project_id) WHERE archived_at IS NULL;
+CREATE INDEX idx_apps_project ON android_automation.apps(project_id) WHERE archived_at IS NULL;
 
-CREATE TABLE automation.app_versions (
+CREATE TABLE android_automation.app_versions (
     id                  BIGSERIAL    PRIMARY KEY,
-    app_id              BIGINT       NOT NULL REFERENCES automation.apps(id) ON DELETE CASCADE,
+    app_id              BIGINT       NOT NULL REFERENCES android_automation.apps(id) ON DELETE CASCADE,
     version_code        BIGINT       NOT NULL,                    -- Android manifest versionCode (int ama 64-bit güvenli)
     version_name        VARCHAR(255),                              -- Android manifest versionName (ör. "1.4.2")
     file_size_bytes     BIGINT       NOT NULL,
@@ -37,4 +37,4 @@ CREATE TABLE automation.app_versions (
     uploaded_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     UNIQUE (app_id, version_code)
 );
-CREATE INDEX idx_app_versions_app ON automation.app_versions(app_id, version_code DESC);
+CREATE INDEX idx_app_versions_app ON android_automation.app_versions(app_id, version_code DESC);

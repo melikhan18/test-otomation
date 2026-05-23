@@ -9,5 +9,5 @@
 -- │  Not consumed by the execution engine — purely documentation that   │
 -- │  the report / step card surfaces next to the action.                │
 -- └────────────────────────────────────────────────────────────────────┘
-ALTER TABLE automation.steps
+ALTER TABLE android_automation.steps
     ADD COLUMN expected_result TEXT;

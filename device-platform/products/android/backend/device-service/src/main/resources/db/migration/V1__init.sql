@@ -1,4 +1,4 @@
-CREATE TABLE device.devices (
+CREATE TABLE android_device.devices (
     id              BIGSERIAL PRIMARY KEY,
     product_id      BIGINT       NOT NULL,
     serial          VARCHAR(128) NOT NULL,
@@ -12,9 +12,9 @@ CREATE TABLE device.devices (
     last_seen_at    TIMESTAMPTZ,
     UNIQUE (product_id, serial)
 );
-CREATE INDEX idx_devices_product ON device.devices(product_id);
+CREATE INDEX idx_devices_product ON android_device.devices(product_id);
 
-CREATE TABLE device.enrollment_tokens (
+CREATE TABLE android_device.enrollment_tokens (
     id                BIGSERIAL PRIMARY KEY,
     token             VARCHAR(255) NOT NULL UNIQUE,
     product_id        BIGINT       NOT NULL,
@@ -24,4 +24,4 @@ CREATE TABLE device.enrollment_tokens (
     used_by_device_id BIGINT,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_enroll_token ON device.enrollment_tokens(token);
+CREATE INDEX idx_enroll_token ON android_device.enrollment_tokens(token);

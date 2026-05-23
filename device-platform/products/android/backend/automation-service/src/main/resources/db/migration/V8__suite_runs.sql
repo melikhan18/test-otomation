@@ -1,7 +1,7 @@
 -- Suite-level run: a single user click on "Run suite" creates one row here and N child
 -- runs (one per scenario). The orchestrator chains the scenarios sequentially on the
 -- same device. Aggregate status / counts are rolled up at suite-run finish.
-CREATE TABLE automation.suite_runs (
+CREATE TABLE android_automation.suite_runs (
     id                    BIGSERIAL    PRIMARY KEY,
     product_id            BIGINT       NOT NULL,
     suite_id              BIGINT       NOT NULL,
@@ -22,12 +22,12 @@ CREATE TABLE automation.suite_runs (
 );
 
 CREATE INDEX suite_runs_product_created_idx
-    ON automation.suite_runs (product_id, created_at DESC);
+    ON android_automation.suite_runs (product_id, created_at DESC);
 CREATE INDEX suite_runs_suite_created_idx
-    ON automation.suite_runs (suite_id, created_at DESC);
+    ON android_automation.suite_runs (suite_id, created_at DESC);
 
 -- Backlink on each child run. Nullable: a one-off "run scenario" stays standalone.
-ALTER TABLE automation.runs
-    ADD COLUMN suite_run_id BIGINT REFERENCES automation.suite_runs(id) ON DELETE SET NULL;
+ALTER TABLE android_automation.runs
+    ADD COLUMN suite_run_id BIGINT REFERENCES android_automation.suite_runs(id) ON DELETE SET NULL;
 
-CREATE INDEX runs_suite_run_idx ON automation.runs (suite_run_id) WHERE suite_run_id IS NOT NULL;
+CREATE INDEX runs_suite_run_idx ON android_automation.runs (suite_run_id) WHERE suite_run_id IS NOT NULL;

@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.devicefarm.agent"
+    namespace = "com.qaplatform.android.agent"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.devicefarm.agent"
+        applicationId = "com.qaplatform.android.agent"
         minSdk = 28
         targetSdk = 34
         versionCode = 10

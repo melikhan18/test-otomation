@@ -86,5 +86,5 @@ management:
 
 logging:
   level:
-    com.devicefarm: DEBUG
+    com.qaplatform: DEBUG
     org.springframework.cloud.gateway: INFO

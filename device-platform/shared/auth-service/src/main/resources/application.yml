@@ -44,4 +44,4 @@ management:
 
 logging:
   level:
-    com.devicefarm: DEBUG
+    com.qaplatform: DEBUG

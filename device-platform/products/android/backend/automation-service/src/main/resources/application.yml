@@ -4,7 +4,7 @@ server:
 
 spring:
   application:
-    name: automation-service
+    name: android-automation-service
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:device_platform}
     username: ${DB_USER:dp}
@@ -14,12 +14,12 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        default_schema: automation
+        default_schema: android_automation
         jdbc.time_zone: UTC
   flyway:
     enabled: true
-    default-schema: automation
-    schemas: automation
+    default-schema: android_automation
+    schemas: android_automation
     locations: classpath:db/migration
   servlet:
     multipart:
@@ -62,4 +62,4 @@ management:
 
 logging:
   level:
-    com.devicefarm: DEBUG
+    com.qaplatform: DEBUG

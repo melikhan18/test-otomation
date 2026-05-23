@@ -13,5 +13,5 @@
 -- └────────────────────────────────────────────────────────────────────┘
 
 CREATE UNIQUE INDEX uniq_devices_company_serial
-    ON device.devices (company_id, serial)
+    ON android_device.devices (company_id, serial)
     WHERE company_id IS NOT NULL;

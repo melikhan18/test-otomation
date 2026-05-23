@@ -2,9 +2,9 @@
 //   shared/                         shared kernel reused by every platform stack
 //   products/{platform}/backend/    platform-specific backend services
 //
-// Module short names (`:auth-service`, `:automation-service`) are kept so existing
-// Gradle task references (`:auth-service:bootJar`) and Dockerfile build args still
-// resolve. Only `projectDir` points to the new physical path.
+// Module short names reflect the deployment name (e.g. `:android-device-service`)
+// so Gradle task references match Docker compose service names and Dockerfile
+// build args one-for-one.
 
 rootProject.name = "qa-platform"
 
@@ -18,15 +18,15 @@ project(":auth-service").projectDir = file("shared/auth-service")
 project(":api-gateway").projectDir  = file("shared/api-gateway")
 
 // ─── Android platform stack ──────────────────────────────────────────────────
-include(":automation-service")
-include(":device-service")
-include(":session-service")
-include(":device-bridge-service")
+include(":android-automation-service")
+include(":android-device-service")
+include(":android-session-service")
+include(":android-bridge-service")
 
-project(":automation-service").projectDir    = file("products/android/backend/automation-service")
-project(":device-service").projectDir        = file("products/android/backend/device-service")
-project(":session-service").projectDir       = file("products/android/backend/session-service")
-project(":device-bridge-service").projectDir = file("products/android/backend/device-bridge-service")
+project(":android-automation-service").projectDir = file("products/android/backend/automation-service")
+project(":android-device-service").projectDir     = file("products/android/backend/device-service")
+project(":android-session-service").projectDir    = file("products/android/backend/session-service")
+project(":android-bridge-service").projectDir     = file("products/android/backend/device-bridge-service")
 
 // ─── (gelecek platformlar buraya eklenir — iOS, backend, web) ────────────────
 

@@ -1,2 +1,2 @@
-com.devicefarm.common.jwt.JwtAutoConfiguration
-com.devicefarm.common.error.ErrorAutoConfiguration
+com.qaplatform.common.jwt.JwtAutoConfiguration
+com.qaplatform.common.error.ErrorAutoConfiguration

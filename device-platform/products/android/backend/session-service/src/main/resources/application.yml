@@ -4,7 +4,7 @@ server:
 
 spring:
   application:
-    name: session-service
+    name: android-session-service
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:device_platform}
     username: ${DB_USER:dp}
@@ -14,12 +14,12 @@ spring:
       ddl-auto: validate
     properties:
       hibernate:
-        default_schema: session
+        default_schema: android_session
         jdbc.time_zone: UTC
   flyway:
     enabled: true
-    default-schema: session
-    schemas: session
+    default-schema: android_session
+    schemas: android_session
     locations: classpath:db/migration
   data:
     redis:
@@ -41,4 +41,4 @@ management:
 
 logging:
   level:
-    com.devicefarm: DEBUG
+    com.qaplatform: DEBUG

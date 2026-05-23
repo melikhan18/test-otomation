@@ -2,7 +2,7 @@
 -- │  Element Repository (Page Object)                                  │
 -- │  Named UI elements, primary + fallback locators, optional crop.    │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.elements (
+CREATE TABLE android_automation.elements (
     id                BIGSERIAL PRIMARY KEY,
     product_id        BIGINT       NOT NULL,
     name              VARCHAR(160) NOT NULL,
@@ -20,12 +20,12 @@ CREATE TABLE automation.elements (
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     UNIQUE (product_id, name)
 );
-CREATE INDEX idx_elements_product ON automation.elements(product_id);
+CREATE INDEX idx_elements_product ON android_automation.elements(product_id);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Test Data — named values, environment-scoped, optional sensitive  │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.test_data (
+CREATE TABLE android_automation.test_data (
     id                BIGSERIAL PRIMARY KEY,
     product_id        BIGINT       NOT NULL,
     name              VARCHAR(160) NOT NULL,
@@ -38,12 +38,12 @@ CREATE TABLE automation.test_data (
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     UNIQUE (product_id, name, environment)
 );
-CREATE INDEX idx_test_data_product_env ON automation.test_data(product_id, environment);
+CREATE INDEX idx_test_data_product_env ON android_automation.test_data(product_id, environment);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Suites — group of scenarios                                       │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.suites (
+CREATE TABLE android_automation.suites (
     id                BIGSERIAL PRIMARY KEY,
     product_id        BIGINT       NOT NULL,
     name              VARCHAR(255) NOT NULL,
@@ -53,12 +53,12 @@ CREATE TABLE automation.suites (
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_suites_product ON automation.suites(product_id);
+CREATE INDEX idx_suites_product ON android_automation.suites(product_id);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Scenarios — sequence of test steps                                │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.scenarios (
+CREATE TABLE android_automation.scenarios (
     id                BIGSERIAL PRIMARY KEY,
     product_id        BIGINT       NOT NULL,
     name              VARCHAR(255) NOT NULL,
@@ -70,20 +70,20 @@ CREATE TABLE automation.scenarios (
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_scenarios_product ON automation.scenarios(product_id);
+CREATE INDEX idx_scenarios_product ON android_automation.scenarios(product_id);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Steps — atomic actions inside a scenario                          │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.steps (
+CREATE TABLE android_automation.steps (
     id                BIGSERIAL PRIMARY KEY,
-    scenario_id       BIGINT       NOT NULL REFERENCES automation.scenarios(id) ON DELETE CASCADE,
+    scenario_id       BIGINT       NOT NULL REFERENCES android_automation.scenarios(id) ON DELETE CASCADE,
     order_index       INT          NOT NULL,
     action            VARCHAR(32)  NOT NULL,                    -- CLICK | LONG_PRESS | SWIPE | ENTER_TEXT | CLEAR |
                                                                 -- PRESS_KEY | WAIT_FOR_VISIBLE | SLEEP |
                                                                 -- ASSERT_VISIBLE | ASSERT_TEXT | SCREENSHOT | COMMENT
-    target_element_id BIGINT       REFERENCES automation.elements(id) ON DELETE SET NULL,
-    data_id           BIGINT       REFERENCES automation.test_data(id) ON DELETE SET NULL,
+    target_element_id BIGINT       REFERENCES android_automation.elements(id) ON DELETE SET NULL,
+    data_id           BIGINT       REFERENCES android_automation.test_data(id) ON DELETE SET NULL,
     literal_value     TEXT,
     timeout_ms        INT          NOT NULL DEFAULT 5000,
     retry_count       INT          NOT NULL DEFAULT 0,
@@ -91,27 +91,27 @@ CREATE TABLE automation.steps (
     flow_meta         TEXT         NOT NULL DEFAULT '{}',       -- JSON for if/else/loop refs
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_steps_scenario_order ON automation.steps(scenario_id, order_index);
+CREATE INDEX idx_steps_scenario_order ON android_automation.steps(scenario_id, order_index);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Suite ↔ Scenario  (M:N, ordered within a suite)                   │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.suite_scenarios (
-    suite_id          BIGINT       NOT NULL REFERENCES automation.suites(id)    ON DELETE CASCADE,
-    scenario_id       BIGINT       NOT NULL REFERENCES automation.scenarios(id) ON DELETE CASCADE,
+CREATE TABLE android_automation.suite_scenarios (
+    suite_id          BIGINT       NOT NULL REFERENCES android_automation.suites(id)    ON DELETE CASCADE,
+    scenario_id       BIGINT       NOT NULL REFERENCES android_automation.scenarios(id) ON DELETE CASCADE,
     order_index       INT          NOT NULL,
     PRIMARY KEY (suite_id, scenario_id)
 );
-CREATE INDEX idx_suite_scenarios_order ON automation.suite_scenarios(suite_id, order_index);
+CREATE INDEX idx_suite_scenarios_order ON android_automation.suite_scenarios(suite_id, order_index);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Runs — execution instances                                        │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.runs (
+CREATE TABLE android_automation.runs (
     id                BIGSERIAL PRIMARY KEY,
     product_id        BIGINT       NOT NULL,
-    suite_id          BIGINT       REFERENCES automation.suites(id) ON DELETE SET NULL,
-    scenario_id       BIGINT       REFERENCES automation.scenarios(id) ON DELETE SET NULL,
+    suite_id          BIGINT       REFERENCES android_automation.suites(id) ON DELETE SET NULL,
+    scenario_id       BIGINT       REFERENCES android_automation.scenarios(id) ON DELETE SET NULL,
     scenario_version  INT,
     device_id         BIGINT,
     session_id        BIGINT,
@@ -128,16 +128,16 @@ CREATE TABLE automation.runs (
     error_summary     TEXT,
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_runs_product_status ON automation.runs(product_id, status);
-CREATE INDEX idx_runs_scenario       ON automation.runs(scenario_id);
-CREATE INDEX idx_runs_created        ON automation.runs(created_at DESC);
+CREATE INDEX idx_runs_product_status ON android_automation.runs(product_id, status);
+CREATE INDEX idx_runs_scenario       ON android_automation.runs(scenario_id);
+CREATE INDEX idx_runs_created        ON android_automation.runs(created_at DESC);
 
 -- ┌────────────────────────────────────────────────────────────────────┐
 -- │  Step Results — per-step outcome inside a run                      │
 -- └────────────────────────────────────────────────────────────────────┘
-CREATE TABLE automation.step_results (
+CREATE TABLE android_automation.step_results (
     id                BIGSERIAL PRIMARY KEY,
-    run_id            BIGINT       NOT NULL REFERENCES automation.runs(id) ON DELETE CASCADE,
+    run_id            BIGINT       NOT NULL REFERENCES android_automation.runs(id) ON DELETE CASCADE,
     step_id           BIGINT,
     order_index       INT          NOT NULL,
     action            VARCHAR(32)  NOT NULL,
@@ -150,4 +150,4 @@ CREATE TABLE automation.step_results (
     resolved_locator  TEXT,                                     -- which strategy succeeded (self-heal trace)
     retries_used      INT          NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_step_results_run ON automation.step_results(run_id, order_index);
+CREATE INDEX idx_step_results_run ON android_automation.step_results(run_id, order_index);
