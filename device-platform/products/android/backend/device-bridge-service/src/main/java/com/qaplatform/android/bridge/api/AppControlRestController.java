@@ -26,7 +26,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 
 /**
- * App-control surface used by {@code automation-service}'s RunOrchestrator to:
+ * App-control surface used by {@code android-automation-service}'s RunOrchestrator to:
  *   - probe what's installed on the device,
  *   - install / update an APK (downloaded by the agent from MinIO),
  *   - launch the target app, and

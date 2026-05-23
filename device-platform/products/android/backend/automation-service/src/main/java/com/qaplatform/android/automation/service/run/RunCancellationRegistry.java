@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * finishes, so a stale flag can't accidentally cancel a later run that reuses
  * the same id (shouldn't happen with BIGSERIAL but cheap to guard against).
  *
- * Cluster note: process-local. If automation-service is ever scaled to >1
+ * Cluster note: process-local. If android-automation-service is ever scaled to >1
  * instance, replace with a Redis pub/sub or a DB-driven flag column. For now
  * we trust the run to live on a single host.
  */

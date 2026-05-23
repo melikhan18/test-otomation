@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * Cross-schema read-only view of {@code device.devices}. Used by SessionService to
  * answer "which company owns this device, and is it restricted?" without pulling
- * device-service's JPA entities into the session-service module.
+ * android-device-service's JPA entities into the android-session-service module.
  *
  * Cached per-device since the company assignment never changes after enrollment.
  */

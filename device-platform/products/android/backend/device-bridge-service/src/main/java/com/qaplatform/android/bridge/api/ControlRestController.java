@@ -27,13 +27,13 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Synchronous control surface used by {@code automation-service} to drive a device.
+ * Synchronous control surface used by {@code android-automation-service} to drive a device.
  *
  * The original WebSocket protocol stays in place for live web sessions; this REST layer
  * just translates "send a frame and wait" into HTTP request/response so the execution
  * worker can call it from a synchronous step loop without managing a long-lived socket.
  *
- * Auth: session JWT (issued by session-service when a reservation is created) is required
+ * Auth: session JWT (issued by android-session-service when a reservation is created) is required
  * in the {@code Authorization: Bearer} header. The session token carries {@code deviceId}
  * and {@code productId} claims, which are then matched against the {@link DeviceChannel}.
  */
@@ -202,7 +202,7 @@ public class ControlRestController {
 
     /**
      * Begin recording the device's H.264 stream. Idempotent: a second call while a
-     * recording is active is a no-op. The recorder lives on the bridge — automation-service
+     * recording is active is a no-op. The recorder lives on the bridge — android-automation-service
      * doesn't carry the byte-stream, only requests start/stop and downloads the final MP4.
      */
     @PostMapping("/record/start")

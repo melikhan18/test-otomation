@@ -5,7 +5,7 @@ plugins {
 }
 
 allprojects {
-    group = "com.devicefarm"
+    group = "com.qaplatform"
     version = "0.1.0"
 }
 

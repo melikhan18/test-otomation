@@ -12,10 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Sweeps ACTIVE sessions whose underlying agent is no longer online.
  *
- * Agent presence is tracked by the device-service via the Redis key
+ * Agent presence is tracked by the android-device-service via the Redis key
  * {@code device:online:{deviceId}} (TTL ≈ 20 s, refreshed by HTTP heartbeat). If that key
  * disappears while we still hold an ACTIVE session, the lock and DB row are stale —
- * release them so the device-service stops reporting IN_USE and the device returns to
+ * release them so the android-device-service stops reporting IN_USE and the device returns to
  * OFFLINE / ONLINE on the next refresh.
  *
  * A small grace period (one sweep cycle) absorbs transient network blips: the agent has

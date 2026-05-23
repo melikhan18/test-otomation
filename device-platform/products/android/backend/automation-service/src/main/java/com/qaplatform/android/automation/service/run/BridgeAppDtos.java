@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 /**
  * Decoded reply shapes returned by the bridge's app-control endpoints. Kept here
- * (rather than imported from the bridge module) so automation-service stays a
+ * (rather than imported from the bridge module) so android-automation-service stays a
  * peer of the bridge over HTTP, not a code-level coupling. {@code @JsonIgnoreProperties(ignoreUnknown=true)}
  * leaves room for the bridge to add fields without breaking this client.
  */

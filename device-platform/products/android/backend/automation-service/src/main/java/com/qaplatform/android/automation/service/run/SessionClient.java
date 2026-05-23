@@ -11,10 +11,10 @@ import org.springframework.web.client.RestClient;
 import java.util.Map;
 
 /**
- * Thin client that calls session-service to acquire / release a device reservation on
+ * Thin client that calls android-session-service to acquire / release a device reservation on
  * behalf of the user who triggered the run.
  *
- * The user JWT is forwarded so session-service's existing ownership checks apply
+ * The user JWT is forwarded so android-session-service's existing ownership checks apply
  * (cross-product access is rejected, etc.).
  */
 @Component
@@ -30,7 +30,7 @@ public class SessionClient {
 
     public Reservation reserve(long deviceId, String userJwt, Long companyId, Long projectId) {
         try {
-            // Forward the tenancy context as headers so session-service can validate
+            // Forward the tenancy context as headers so android-session-service can validate
             // device-vs-company and (optionally) device-vs-project access policy.
             JsonNode body = http.post()
                     .uri("/api/sessions")
@@ -43,7 +43,7 @@ public class SessionClient {
                     .retrieve()
                     .body(JsonNode.class);
             if (body == null || !body.has("id") || !body.has("sessionToken")) {
-                throw ApiException.badRequest("session-service returned no token");
+                throw ApiException.badRequest("android-session-service returned no token");
             }
             return new Reservation(body.get("id").asLong(), body.get("sessionToken").asText());
         } catch (HttpStatusCodeException e) {

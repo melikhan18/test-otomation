@@ -109,7 +109,7 @@ public class RunOrchestrator {
 
         SessionClient.Reservation reservation;
         try {
-            // Forward the run's tenancy context to session-service so it can validate
+            // Forward the run's tenancy context to android-session-service so it can validate
             // device-vs-project access before locking. ProjectLookup gives us companyId
             // without holding a JPA reference to auth's schema.
             Long companyId = projectLookup.find(run.getProjectId())

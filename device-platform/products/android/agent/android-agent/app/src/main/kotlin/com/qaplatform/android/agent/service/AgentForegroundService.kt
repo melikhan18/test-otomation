@@ -368,7 +368,7 @@ class AgentForegroundService : Service() {
         private const val TAG = "AgentFgs"
         private const val CHANNEL_ID = "agent_status"
         private const val NOTIFICATION_ID = 1
-        private const val HEARTBEAT_INTERVAL_MS = 10_000L     // HTTP heartbeat → device-service
+        private const val HEARTBEAT_INTERVAL_MS = 10_000L     // HTTP heartbeat → android-device-service
         private const val WS_HEARTBEAT_INTERVAL_MS = 8_000L   // WS HEARTBEAT frame → bridge
 
         private const val EXTRA_RESULT_CODE = "result_code"

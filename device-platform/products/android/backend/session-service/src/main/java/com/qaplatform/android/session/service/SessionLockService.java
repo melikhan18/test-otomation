@@ -13,7 +13,7 @@ import java.util.List;
  * Owns the two Redis keys used to coordinate device reservation:
  * <ul>
  *   <li>{@code device:lock:{deviceId}} — atomic acquire (SETNX), value = sessionId, TTL = lock-ttl-minutes</li>
- *   <li>{@code device:session:{deviceId}} — convenience pointer the device-service reads to expose IN_USE</li>
+ *   <li>{@code device:session:{deviceId}} — convenience pointer the android-device-service reads to expose IN_USE</li>
  * </ul>
  * Both keys are deleted on release, both refreshed on touch.
  *

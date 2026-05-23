@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Long-lived WebSocket to the device-bridge-service. Reconnects with exponential backoff.
+ * Long-lived WebSocket to the android-bridge-service. Reconnects with exponential backoff.
  * Inbound frames are emitted via {@link incoming}; outbound goes through {@link send}.
  */
 class AgentSocket(

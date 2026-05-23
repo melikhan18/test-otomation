@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Pattern;
  * Request/response shapes for the bridge's app-control REST surface. These mirror the
  * JSON payloads the agent sees on the WebSocket wire (frame types 0x0B–0x12). Keeping
  * them as Java records — rather than {@code Map<String, Object>} — lets validation
- * fire on bad input and gives {@code automation-service} typed reply parsing.
+ * fire on bad input and gives {@code android-automation-service} typed reply parsing.
  */
 public class AppControlDtos {
 

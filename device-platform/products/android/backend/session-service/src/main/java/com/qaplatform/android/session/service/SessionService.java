@@ -31,7 +31,7 @@ public class SessionService {
      * Reserve a device. Tenancy guard verifies the caller belongs to the device's
      * company; if an active project is supplied and the device is restricted, the
      * project must be on its access whitelist. Anyone who slips past those checks
-     * would be bypassing the device-service visibility filter — so we re-check here.
+     * would be bypassing the android-device-service visibility filter — so we re-check here.
      */
     @Transactional
     public SessionDtos.SessionView create(JwtPrincipal caller, long deviceId, Long companyId, Long projectId) {
