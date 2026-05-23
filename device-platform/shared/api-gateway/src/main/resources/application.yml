@@ -15,6 +15,7 @@ spring:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
       routes:
+        # ── Shared kernel (X-Platform irrelevant) ──────────────────────────────
         - id: auth
           uri: ${SVC_AUTH:http://localhost:8081}
           predicates:
@@ -32,26 +33,72 @@ spring:
           uri: ${SVC_AUTH:http://localhost:8081}
           predicates:
             - Path=/api/admin/**
-        - id: devices
+
+        # ── Android platform stack ─────────────────────────────────────────────
+        #
+        # New (F3+) route surface: clients use platform-agnostic paths like
+        # /api/runs/123 and identify the target platform via the X-Platform
+        # header. The gateway dispatches to the matching backend stack — same
+        # underlying service today (Android only), but the contract is open for
+        # iOS / Backend / Web stacks to slot in without touching the client.
+        #
+        # During F3 we also keep the legacy /api/automation/** path mapped to
+        # the Android automation-service so the existing frontend keeps working
+        # while F4 migrates it to the platform-agnostic URLs.
+        - id: android-devices
           uri: ${SVC_DEVICE:http://localhost:8082}
           predicates:
             - Path=/api/devices/**,/api/agent/**
-        - id: sessions
+            - Header=X-Platform, ANDROID
+        - id: android-sessions
           uri: ${SVC_SESSION:http://localhost:8083}
           predicates:
             - Path=/api/sessions/**
+            - Header=X-Platform, ANDROID
+        - id: android-bridge-http
+          uri: ${SVC_BRIDGE:http://localhost:8084}
+          predicates:
+            - Path=/api/bridge/**
+            - Header=X-Platform, ANDROID
+
+        # Automation resources — platform-agnostic paths with header dispatch.
+        # The backend still serves /api/automation/{resource}; we RewritePath
+        # to translate /api/{resource}/** → /api/automation/{resource}/** for
+        # now. F-future can drop the rewrite when backend controller paths
+        # are themselves platform-agnostic.
+        - id: android-automation-resources
+          uri: ${SVC_AUTOMATION:http://localhost:8085}
+          predicates:
+            - Path=/api/scenarios/**,/api/suites/**,/api/apps/**,/api/elements/**,/api/test-data/**,/api/runs/**,/api/suite-runs/**,/api/workspace/**
+            - Header=X-Platform, ANDROID
+          filters:
+            - RewritePath=/api/(?<seg>scenarios|suites|apps|elements|test-data|runs|suite-runs|workspace)(?<rest>/?.*), /api/automation/${seg}${rest}
+
+        # ── WebSocket (path-based — browsers can't set custom headers on WS) ──
         - id: bridge-ws
           uri: ${SVC_BRIDGE_WS:ws://localhost:8084}
           predicates:
             - Path=/ws/**
-        - id: bridge-http
+
+        # ── Legacy compatibility (deprecated — frontend still uses these
+        #    until F4 migrates it to /api/{resource} + X-Platform header) ──────
+        - id: legacy-devices
+          uri: ${SVC_DEVICE:http://localhost:8082}
+          predicates:
+            - Path=/api/devices/**,/api/agent/**
+        - id: legacy-sessions
+          uri: ${SVC_SESSION:http://localhost:8083}
+          predicates:
+            - Path=/api/sessions/**
+        - id: legacy-bridge-http
           uri: ${SVC_BRIDGE:http://localhost:8084}
           predicates:
             - Path=/api/bridge/**
-        - id: automation
+        - id: legacy-automation
           uri: ${SVC_AUTOMATION:http://localhost:8085}
           predicates:
             - Path=/api/automation/**
+
       globalcors:
         cors-configurations:
           '[/**]':
@@ -70,6 +117,15 @@ spring:
               - OPTIONS
             allowed-headers:
               - "*"
+            # CORS preflight needs to know X-Platform is an accepted custom header.
+            # "*" above covers it for non-credentialed requests, but allow-credentials
+            # forces exact listing — Spring expands "*" itself, but listing the
+            # known custom headers helps with restrictive CORS proxies in front.
+            exposed-headers:
+              - Authorization
+              - X-Platform
+              - X-Company-Id
+              - X-Project-Id
             allow-credentials: true
             max-age: 3600
 
