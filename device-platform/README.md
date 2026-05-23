@@ -1,43 +1,51 @@
-# Device Platform
+# QA Platform
 
-Production-grade Android device farm — stream live device screens to the browser, control them remotely (tap/swipe/key/text), and inspect UI elements (resource-id, xpath, text). Self-hosted alternative to AWS Device Farm.
+Self-hosted multi-platform test automation. Today: Android device farm — stream live device screens to the browser, control them remotely (tap/swipe/key/text), inspect UI elements, and run scenario / suite automations. Roadmap: iOS, backend (API), and web stacks slot in alongside Android under the same gateway, the same frontend, and the same shared kernel.
 
-## Architecture
+> The repo directory is still `device-platform/` while the multi-platform refactor (F0–F8) lands. It will be renamed `qa-platform/` in the final faz.
+
+## Architecture (post-F5)
 
 ```
-┌─────────────────┐  WS (binary, multiplexed) ┌───────────────────────┐
-│ Android Agent   │ ◄───────────────────────► │ device-bridge-service │
-│  (Kotlin APK)   │   video / control /       │  WebFlux / Netty WS   │
-│                 │   inspect / heartbeat     │  fan-out + back-press │
-└─────────────────┘                           └───────────┬───────────┘
-                                                          │
-┌─────────────────┐  WS /ws/session/{id}/video            │
-│ React Web       │ ◄────────────────────────────────────┤
-│ Console         │  WS /ws/session/{id}/control          │
-│  WebCodecs      │  REST /api/*                          │
-└─────────────────┘            │                          │
-                               ▼                          │
-                     ┌───────────────┐                    │
-                     │ api-gateway   │                    │
-                     │ (Spring CG)   │                    │
-                     └───┬───┬───┬───┘                    │
-                     auth│dev│ses│                        │
-                         ▼   ▼   ▼                        │
-                     ┌────────────────────┐               │
-                     │ Spring Boot REST   │ ──────────────┘
-                     │ + PostgreSQL 16    │     Redis pub/sub
-                     │ + Redis 7          │     (locks, online)
-                     └────────────────────┘
+┌─────────────────┐  WS (binary, multiplexed) ┌────────────────────────────┐
+│ Android Agent   │ ◄───────────────────────► │ android-bridge-service     │
+│  (Kotlin APK)   │   video / control /       │   WebFlux / Netty WS       │
+│                 │   inspect / heartbeat     │   fan-out + back-press     │
+└─────────────────┘                           └─────────────┬──────────────┘
+                                                            │
+┌─────────────────┐  WS /ws/session/{id}/video              │
+│ React Web       │ ◄──────────────────────────────────────┤
+│ Console         │  REST /api/* + X-Platform header        │
+│  WebCodecs      │                                          │
+└─────────────────┘            │                             │
+                               ▼                             │
+                  ┌────────────────────────┐                 │
+                  │ api-gateway (Spring CG)│                 │
+                  │ header-based dispatch  │                 │
+                  └─┬──────┬────────┬──────┘                 │
+                    │      │        │                        │
+       shared kernel│      │ android platform stack          │
+         auth /     │      │  android-device /               │
+         tenant     │      │  android-session /              │
+                    │      │  android-automation /           │
+                    ▼      ▼        ▼                        │
+                  ┌──────────────────────────┐               │
+                  │ Spring Boot REST         │ ──────────────┘
+                  │ + PostgreSQL 16          │     Redis pub/sub
+                  │ + Redis 7  + MinIO       │     (locks, online)
+                  └──────────────────────────┘
 ```
 
-| Service                 | Port | Description                                                              |
-|-------------------------|------|--------------------------------------------------------------------------|
-| api-gateway             | 8080 | Spring Cloud Gateway, JWT edge validation, routes to all services        |
-| auth-service            | 8081 | User login, JWT issuance/refresh                                         |
-| device-service          | 8082 | Device registry, enrollment tokens, agent heartbeat (Redis TTL)          |
-| session-service         | 8083 | Device reservation (Redis lock), session JWT                             |
-| device-bridge-service   | 8084 | **WebFlux/Netty** WS hub between agent and web (video + control + inspect) |
-| web-console (dev)       | 3000 | Vite + React 18 + Tailwind                                                |
+| Service                    | Port | Layer    | Description                                                              |
+|----------------------------|------|----------|--------------------------------------------------------------------------|
+| api-gateway                | 8080 | shared   | Spring Cloud Gateway, JWT edge validation, header-based platform dispatch |
+| auth-service               | 8081 | shared   | User login, JWT issuance/refresh, companies & projects                   |
+| tenant-service             | 8089 | shared   | `project_platforms` — which platforms each project has activated         |
+| android-device-service     | 8082 | android  | Device registry, enrollment tokens, agent heartbeat (Redis TTL)          |
+| android-session-service    | 8083 | android  | Device reservation (Redis lock), session JWT                             |
+| android-bridge-service     | 8084 | android  | **WebFlux/Netty** WS hub between agent and web (video + control + inspect) |
+| android-automation-service | 8085 | android  | Scenarios, suites, runs, elements, APK repository                        |
+| web-console (dev)          | 3000 | frontend | Vite + React 18 + Tailwind                                               |
 
 ## Stream Protocol
 
@@ -56,6 +64,7 @@ Each WebSocket binary message is exactly one frame:
 | 0x06 | bidirectional  | Heartbeat                                          |
 | 0x07 | agent → hub    | Stream metadata JSON (width/height/fps/codec)      |
 | 0x08 | hub → agent    | Force keyframe (no payload)                        |
+| 0x0B–0x12 | both       | APK repository ops (install / launch / reset)       |
 
 ## Quick Start — Docker (full stack)
 
@@ -80,26 +89,26 @@ Default login: `admin / Admin@123`.
 
 ## Quick Start — Local development (no Docker for services)
 
+The Gradle root sits at the repo root (no `backend/` subdir anymore — F1 refactor).
+
 ```bash
-# 1. Infrastructure only
-docker compose -f deploy/docker-compose/infrastructure.yml up -d
+# 1. Infrastructure only (postgres + redis + minio)
+docker compose up -d postgres redis minio minio-init
 
-# 2. Bootstrap Gradle wrapper (one time)
-cd backend
-gradle wrapper --gradle-version=8.10
-
-# 3. Start each service in its own terminal
+# 2. Start each service in its own terminal (from repo root)
 ./gradlew :auth-service:bootRun
-./gradlew :device-service:bootRun
-./gradlew :session-service:bootRun
-./gradlew :device-bridge-service:bootRun
+./gradlew :tenant-service:bootRun
+./gradlew :android-device-service:bootRun
+./gradlew :android-session-service:bootRun
+./gradlew :android-bridge-service:bootRun
+./gradlew :android-automation-service:bootRun
 ./gradlew :api-gateway:bootRun
 
-# 4. Frontend
-cd ../frontend/web-console && pnpm install && pnpm dev
+# 3. Frontend
+cd frontend/web-console && pnpm install && pnpm dev
 
-# 5. Android agent
-cd ../../agent/android-agent
+# 4. Android agent
+cd agent/android-agent
 ./gradlew installDebug   # or open in Android Studio
 ```
 
@@ -131,31 +140,45 @@ Prometheus metrics: `http://localhost:8084/actuator/prometheus` (look for `bridg
 ## Repository Layout
 
 ```
-device-platform/
+device-platform/                       # repo (will be renamed qa-platform in final faz)
 ├── README.md
-├── docker-compose.yml                  # full stack (infra + services)
-├── backend/
-│   ├── settings.gradle.kts             # multi-module Gradle build
-│   ├── Dockerfile                      # shared build, switch via --build-arg SERVICE=…
-│   ├── common/                         # JWT, security, errors (autoconfigured)
-│   ├── auth-service/                   # :8081
-│   ├── device-service/                 # :8082
-│   ├── session-service/                # :8083
-│   ├── device-bridge-service/          # :8084  (WebFlux)
-│   └── api-gateway/                    # :8080
+├── docker-compose.yml                 # full stack (infra + all services)
+├── Dockerfile                         # shared multi-stage build; --build-arg SERVICE + SERVICE_PATH
+├── settings.gradle.kts                # Gradle multi-module root
+├── build.gradle.kts
+├── gradle/, gradlew, gradlew.bat
+│
+├── shared/                            # platform-agnostic kernel (reused by every stack)
+│   ├── common/                        # JWT, errors, util — autoconfigured library
+│   ├── auth-service/                  # :8081 — users, companies, projects, JWT
+│   ├── tenant-service/                # :8089 — project_platforms
+│   └── api-gateway/                   # :8080 — Spring Cloud Gateway
+│
+├── products/                          # per-platform stacks
+│   └── android/
+│       └── backend/
+│           ├── device-service/        # :8082
+│           ├── session-service/       # :8083
+│           ├── device-bridge-service/ # :8084  (WebFlux)
+│           └── automation-service/    # :8085  (+ APK repo, scenarios, runs)
+│   (future: ios/, backend/, web/)
+│
 ├── frontend/
-│   └── web-console/                    # Vite + React 18 + TS + Tailwind
+│   └── web-console/                   # Vite + React 18 + TS + Tailwind
+│
 ├── agent/
-│   └── android-agent/                  # Kotlin app, MediaProjection + AccessibilityService
+│   └── android-agent/                 # Kotlin app — MediaProjection + AccessibilityService
+│
+├── docs/architecture.md               # F0 spec — service catalog, routing, tenancy
+│
 └── deploy/
-    ├── docker-compose/infrastructure.yml   # postgres + redis only (IDE dev)
-    └── sql/01-init-schemas.sql             # creates auth / device / session schemas
+    └── sql/01-init-schemas.sql        # creates auth / tenant / android_* schemas
 ```
 
 ## Security Notes
 
 - JWT uses HS512 with a shared secret. **Override `JWT_SECRET`** for any non-local deployment (`openssl rand -base64 64`).
-- Enrollment tokens are single-use, expire in 15 min, and bind the device to the issuer's product.
+- Enrollment tokens are single-use, expire in 15 min, and bind the device to the issuer's project.
 - Sessions hold an exclusive Redis lock on the device for 30 min, refreshable.
 - Agent ↔ bridge token is a long-lived (365 d) agent JWT created at enrollment.
 - The web console is opinionated for Chrome/Edge: WebCodecs `VideoDecoder` is required for H.264 decode.

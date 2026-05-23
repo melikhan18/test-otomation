@@ -9,7 +9,7 @@ import type {
 } from "@/lib/automation";
 
 const STRATEGIES: LocatorStrategy[] = [
-  "RESOURCE_ID", "ACCESSIBILITY_ID", "TEXT", "HINT", "CLASS", "UI_AUTOMATOR", "XPATH",
+  "RESOURCE_ID", "ACCESSIBILITY_ID", "TEXT", "CLASS", "XPATH",
 ];
 
 type Props = {
