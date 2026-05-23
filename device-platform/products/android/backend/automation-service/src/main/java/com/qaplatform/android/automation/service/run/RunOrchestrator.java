@@ -3,6 +3,8 @@ package com.qaplatform.android.automation.service.run;
 import com.qaplatform.android.automation.domain.*;
 import com.qaplatform.android.automation.service.storage.ObjectStorage;
 import com.qaplatform.common.error.ApiException;
+import com.qaplatform.common.runengine.status.RunStatus;
+import com.qaplatform.common.runengine.status.StepResultStatus;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

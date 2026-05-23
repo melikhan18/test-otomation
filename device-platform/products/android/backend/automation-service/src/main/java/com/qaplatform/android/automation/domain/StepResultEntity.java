@@ -1,5 +1,6 @@
 package com.qaplatform.android.automation.domain;
 
+import com.qaplatform.common.runengine.status.StepResultStatus;
 import jakarta.persistence.*;
 
 import java.time.Instant;
