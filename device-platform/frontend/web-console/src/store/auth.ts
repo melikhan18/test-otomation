@@ -4,6 +4,14 @@ import {
   authApi, type CompanyMembership, type LoginResponse, type MeResponse, type SignupRequest,
 } from "@/lib/api";
 
+/**
+ * Which testing product the user is currently looking at. The 4th tenancy
+ * dimension — sits below Company → Project → Platform → Resources. Every API
+ * call sends this as the `X-Platform` header; the gateway dispatches to the
+ * matching backend stack (only ANDROID is live in F4; the rest land in F5+).
+ */
+export type Platform = "ANDROID" | "IOS" | "BACKEND" | "WEB";
+
 type AuthState = {
   accessToken: string | null;
   refreshToken: string | null;
@@ -15,9 +23,10 @@ type AuthState = {
   productId: number | null;
   companies: CompanyMembership[];
 
-  /** Selected company/project for the current tab/window. */
+  /** Selected company/project/platform for the current tab/window. */
   activeCompanyId: number | null;
   activeProjectId: number | null;
+  activePlatform: Platform;
 
   login: (username: string, password: string) => Promise<void>;
   signup: (body: SignupRequest) => Promise<void>;
@@ -28,6 +37,7 @@ type AuthState = {
 
   setActiveCompany: (companyId: number) => void;
   setActiveProject: (projectId: number) => void;
+  setActivePlatform: (platform: Platform) => void;
 };
 
 function pickInitialActive(companies: CompanyMembership[], prevCompanyId: number | null, prevProjectId: number | null) {
@@ -81,6 +91,10 @@ export const useAuthStore = create<AuthState>()(
       companies: [],
       activeCompanyId: null,
       activeProjectId: null,
+      // Default to ANDROID — the only platform with a live backend stack today.
+      // The switcher renders IOS/BACKEND/WEB as "coming soon" so they can't be
+      // selected until their respective stacks land (F5–F8 + per-platform work).
+      activePlatform: "ANDROID",
 
       async login(username, password) {
         const r = await authApi.login(username, password);
@@ -137,6 +151,10 @@ export const useAuthStore = create<AuthState>()(
         if (!company.projects.find((p) => p.id === projectId)) return;
         set({ activeProjectId: projectId });
       },
+
+      setActivePlatform(platform) {
+        set({ activePlatform: platform });
+      },
     }),
     {
       name: "device-platform-auth",
@@ -154,6 +172,7 @@ export const useAuthStore = create<AuthState>()(
         companies: s.companies,
         activeCompanyId: s.activeCompanyId,
         activeProjectId: s.activeProjectId,
+        activePlatform: s.activePlatform,
       }),
     },
   ),

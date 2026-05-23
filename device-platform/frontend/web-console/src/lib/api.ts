@@ -12,14 +12,19 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (state.accessToken) {
     config.headers.Authorization = `Bearer ${state.accessToken}`;
   }
-  // Active company / project — services scope their queries off these once they're
-  // multi-tenant. Header-based so existing URL routing keeps working unchanged.
+  // Active company / project / platform — gateway scopes routing on these once
+  // the backend is multi-platform. Header-based so existing URL routing keeps
+  // working unchanged (legacy path routes still resolve while we migrate).
   if (state.activeCompanyId != null) {
     config.headers["X-Company-Id"] = String(state.activeCompanyId);
   }
   if (state.activeProjectId != null) {
     config.headers["X-Project-Id"] = String(state.activeProjectId);
   }
+  // X-Platform is always set (defaults to ANDROID) so the new header-based
+  // gateway routes can match. Legacy path routes still work even without it,
+  // so this is forward-compatible rather than breaking.
+  config.headers["X-Platform"] = state.activePlatform;
   return config;
 });
 
