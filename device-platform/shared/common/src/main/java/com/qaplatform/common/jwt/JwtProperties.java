@@ -11,7 +11,7 @@ public class JwtProperties {
     private String secret;
 
     /** Issuer claim. */
-    private String issuer = "device-platform";
+    private String issuer = "qa-platform";
 
     /** Access token TTL for human users. */
     private Duration accessTokenTtl = Duration.ofMinutes(30);

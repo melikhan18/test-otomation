@@ -157,7 +157,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "device-platform-auth",
+      name: "qa-platform-auth",
       // Persist the bits we actually want to remember across reloads (including
       // the active company/project so refresh keeps the user where they were).
       partialize: (s) => ({

@@ -6,7 +6,7 @@ spring:
   application:
     name: android-session-service
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:device_platform}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:qa_platform}
     username: ${DB_USER:dp}
     password: ${DB_PASSWORD:dp_dev_password}
   jpa:
@@ -29,7 +29,7 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
-    issuer: device-platform
+    issuer: qa-platform
   session:
     lock-ttl-minutes: 30
 

@@ -144,7 +144,7 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
-    issuer: device-platform
+    issuer: qa-platform
 
 management:
   endpoints:

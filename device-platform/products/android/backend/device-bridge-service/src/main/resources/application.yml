@@ -16,7 +16,7 @@ spring:
 app:
   jwt:
     secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
-    issuer: device-platform
+    issuer: qa-platform
   bridge:
     # how many frames to buffer per web subscriber before dropping non-keyframes
     web-buffer-size: 60

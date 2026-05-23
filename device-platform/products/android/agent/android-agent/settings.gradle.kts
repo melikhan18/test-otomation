@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "device-platform-agent"
+rootProject.name = "qa-platform-agent"
 include(":app")

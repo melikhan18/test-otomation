@@ -2,8 +2,6 @@
 
 Self-hosted multi-platform test automation. Today: Android device farm — stream live device screens to the browser, control them remotely (tap/swipe/key/text), inspect UI elements, and run scenario / suite automations. Roadmap: iOS, backend (API), and web stacks slot in alongside Android under the same gateway, the same frontend, and the same shared kernel.
 
-> The repo directory is still `device-platform/` while the multi-platform refactor (F0–F8) lands. It will be renamed `qa-platform/` in the final faz.
-
 ## Architecture (post-F5)
 
 ```
@@ -140,7 +138,7 @@ Prometheus metrics: `http://localhost:8084/actuator/prometheus` (look for `bridg
 ## Repository Layout
 
 ```
-device-platform/                       # repo (will be renamed qa-platform in final faz)
+qa-platform/
 ├── README.md
 ├── docker-compose.yml                 # full stack (infra + all services)
 ├── Dockerfile                         # shared multi-stage build; --build-arg SERVICE + SERVICE_PATH

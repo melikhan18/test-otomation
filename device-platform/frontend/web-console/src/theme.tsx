@@ -25,7 +25,7 @@ export const useThemeStore = create<ThemeState>()(
       mode: "system",
       setMode: (mode) => set({ mode }),
     }),
-    { name: "device-platform-theme" },
+    { name: "qa-platform-theme" },
   ),
 );
 

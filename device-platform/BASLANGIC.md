@@ -2,8 +2,6 @@
 
 Bu kılavuz projeyi sıfırdan çalıştırıp ilk cihazını bağlayıp web'den kontrol etmen için yeterli.
 
-> Repo dizini hâlâ `device-platform/` — multi-platform refactor (F0–F8) bittikten sonra `qa-platform/` olarak yeniden adlandırılacak.
-
 ---
 
 ## 1. Ön Gereksinimler
@@ -30,7 +28,7 @@ Bu kılavuz projeyi sıfırdan çalıştırıp ilk cihazını bağlayıp web'den
 ## 2. İlk Kurulum (tek seferlik)
 
 ```powershell
-cd C:\Users\melik\Desktop\test-otomation\device-platform
+cd C:\Users\melik\Desktop\test-otomation\qa-platform
 
 # 2.1 — Backend Gradle wrapper'ı zaten repo köküne commit edilmiş.
 #        İlk kez kurulumda ekstra bir şey yapmana gerek yok; .\gradlew.bat direkt çalışır.
@@ -196,7 +194,7 @@ docker compose logs -f device-bridge-service
 docker compose logs -f auth-service
 
 # Postgres'e bağlan
-docker exec -it $(docker compose ps -q postgres) psql -U dp -d device_platform
+docker exec -it $(docker compose ps -q postgres) psql -U dp -d qa_platform
 # > \dn         (şemaları listele — auth / tenant / android_device / android_session / android_automation)
 # > select * from android_device.devices;
 

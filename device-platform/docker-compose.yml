@@ -1,4 +1,4 @@
-name: device-platform
+name: qa-platform
 
 # Full-stack compose: infrastructure + all backend services.
 #
@@ -22,7 +22,7 @@ name: device-platform
 x-service-env: &service-env
   DB_HOST: postgres
   DB_PORT: 5432
-  DB_NAME: ${POSTGRES_DB:-device_platform}
+  DB_NAME: ${POSTGRES_DB:-qa_platform}
   DB_USER: ${POSTGRES_USER:-dp}
   DB_PASSWORD: ${POSTGRES_PASSWORD:-dp_dev_password}
   REDIS_HOST: redis
@@ -43,17 +43,17 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-device_platform}
+      POSTGRES_DB:       ${POSTGRES_DB:-qa_platform}
       POSTGRES_USER:     ${POSTGRES_USER:-dp}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dp_dev_password}
     ports:
       - "${POSTGRES_BIND:-0.0.0.0}:5432:5432"
     volumes:
-      - dp_pgdata:/var/lib/postgresql/data
+      - qp_pgdata:/var/lib/postgresql/data
       - ./deploy/sql:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dp} -d ${POSTGRES_DB:-device_platform}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dp} -d ${POSTGRES_DB:-qa_platform}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -80,7 +80,7 @@ services:
       - "${MINIO_BIND:-0.0.0.0}:9000:9000"   # S3 API
       - "${MINIO_BIND:-0.0.0.0}:9001:9001"   # Web console
     volumes:
-      - dp_miniodata:/data
+      - qp_miniodata:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
@@ -321,7 +321,7 @@ services:
   #   1) Serves the static React bundle (built into /srv inside the image).
   #   2) Reverse-proxies /api → api-gateway, /ws → api-gateway, /minio → minio.
   # Caddy issues + auto-renews Let's Encrypt certs for $DOMAIN and www.$DOMAIN.
-  # Certificates persist in dp_caddydata so restarts don't re-issue and trip
+  # Certificates persist in qp_caddydata so restarts don't re-issue and trip
   # the ACME rate limit.
   #
   # Activate with:   docker compose --profile prod up -d --build
@@ -339,13 +339,13 @@ services:
       - "443:443"
       - "443:443/udp"   # HTTP/3 (QUIC) — Caddy advertises it via Alt-Svc
     volumes:
-      - dp_caddydata:/data         # certificates + ACME account state
-      - dp_caddyconfig:/config     # runtime config snapshot
+      - qp_caddydata:/data         # certificates + ACME account state
+      - qp_caddyconfig:/config     # runtime config snapshot
     restart: unless-stopped
     profiles: ["prod"]
 
 volumes:
-  dp_pgdata:
-  dp_miniodata:
-  dp_caddydata:
-  dp_caddyconfig:
+  qp_pgdata:
+  qp_miniodata:
+  qp_caddydata:
+  qp_caddyconfig:

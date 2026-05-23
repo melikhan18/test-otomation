@@ -1,4 +1,4 @@
--- Initialize device_platform database.
+-- Initialize qa_platform database.
 --
 -- Each Spring service manages its own DDL via Flyway, but Postgres requires
 -- the target schema to exist before the first migration runs. We create
@@ -24,4 +24,4 @@ CREATE SCHEMA IF NOT EXISTS android_automation;
 -- Default search path covers the shared kernel only. Each service overrides
 -- this per JDBC connection via spring.jpa.properties.hibernate.default_schema
 -- so it sees its own schema first.
-ALTER DATABASE device_platform SET search_path TO public, auth, tenant;
+ALTER DATABASE qa_platform SET search_path TO public, auth, tenant;

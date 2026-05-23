@@ -50,7 +50,7 @@ Bu doküman platformun **multi-platform** mimarisini tanımlar: tek frontend + p
 ## 2. Klasör yapısı
 
 ```
-qa-platform/                              ← repo kök (cutover'da `device-platform/` → `qa-platform/`)
+qa-platform/                              ← repo kök
 ├── shared/                                ← paylaşılan servisler
 │   ├── api-gateway/
 │   ├── auth-service/

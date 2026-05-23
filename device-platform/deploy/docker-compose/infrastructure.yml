@@ -1,27 +1,27 @@
-name: device-platform-infra
+name: qa-platform-infra
 
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: dp-postgres
+    container_name: qp-postgres
     environment:
-      POSTGRES_DB: device_platform
+      POSTGRES_DB: qa_platform
       POSTGRES_USER: dp
       POSTGRES_PASSWORD: dp_dev_password
     ports:
       - "5432:5432"
     volumes:
-      - dp_pgdata:/var/lib/postgresql/data
+      - qp_pgdata:/var/lib/postgresql/data
       - ../sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dp -d device_platform"]
+      test: ["CMD-SHELL", "pg_isready -U dp -d qa_platform"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    container_name: dp-redis
+    container_name: qp-redis
     command: ["redis-server", "--appendonly", "no", "--save", ""]
     ports:
       - "6379:6379"
@@ -32,4 +32,4 @@ services:
       retries: 10
 
 volumes:
-  dp_pgdata:
+  qp_pgdata:
