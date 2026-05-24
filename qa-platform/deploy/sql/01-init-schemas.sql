@@ -10,8 +10,9 @@
 --   android_device      android stack — devices, enrollment tokens, agent state
 --   android_session     android stack — session reservations, locks
 --   android_automation  android stack — scenarios, suites, runs, elements, apps
+--   web_automation      web stack     — scenarios, runs, step_results (Playwright)
 --
--- Future platform stacks (ios_*, backend_*, web_*) add their own schemas in
+-- Future platform stacks (ios_*, backend_*) add their own schemas in
 -- new migrations; nothing in this init script changes.
 
 CREATE SCHEMA IF NOT EXISTS auth;
@@ -20,6 +21,7 @@ CREATE SCHEMA IF NOT EXISTS reports;
 CREATE SCHEMA IF NOT EXISTS android_device;
 CREATE SCHEMA IF NOT EXISTS android_session;
 CREATE SCHEMA IF NOT EXISTS android_automation;
+CREATE SCHEMA IF NOT EXISTS web_automation;
 
 -- Default search path covers the shared kernel only. Each service overrides
 -- this per JDBC connection via spring.jpa.properties.hibernate.default_schema

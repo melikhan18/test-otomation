@@ -86,6 +86,19 @@ spring:
           filters:
             - RewritePath=/api/(?<seg>scenarios|suites|apps|elements|test-data|runs|suite-runs|workspace)(?<rest>/?.*), /api/automation/${seg}${rest}
 
+        # ── Web platform stack (v1 — Playwright server-side) ──────────────────
+        # Same resource paths as Android — X-Platform: WEB picks this stack.
+        # /api/browsers/** lists the static profile catalog (chromium-1080p,
+        # firefox-mobile, webkit-ipad, …) so the run dialog can render
+        # platform-specific device pickers.
+        - id: web-automation-resources
+          uri: ${SVC_WEB_RUNNER:http://localhost:8088}
+          predicates:
+            - Path=/api/scenarios/**,/api/runs/**,/api/browsers/**
+            - Header=X-Platform, WEB
+          filters:
+            - RewritePath=/api/(?<seg>scenarios|runs|browsers)(?<rest>/?.*), /api/web/${seg}${rest}
+
         # ── WebSocket (path-based — browsers can't set custom headers on WS) ──
         - id: bridge-ws
           uri: ${SVC_BRIDGE_WS:ws://localhost:8084}
