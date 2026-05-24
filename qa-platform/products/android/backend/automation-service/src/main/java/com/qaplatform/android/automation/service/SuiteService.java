@@ -32,7 +32,7 @@ public class SuiteService {
 
     @Transactional
     public SuiteDtos.View create(JwtPrincipal caller, ProjectContext ctx, SuiteDtos.CreateRequest req) {
-        SuiteEntity s = new SuiteEntity(ctx.legacyProductId(), ctx.projectId(),
+        SuiteEntity s = new SuiteEntity(ctx.projectId(),
                 req.name().trim(), caller.userId());
         s.setDescription(req.description());
         s.setTags(toArray(req.tags()));
@@ -64,7 +64,7 @@ public class SuiteService {
     public List<SuiteDtos.Summary> list(JwtPrincipal caller, ProjectContext ctx) {
         return suites.findAllByProjectIdOrderByUpdatedAtDesc(ctx.projectId()).stream()
                 .map(s -> new SuiteDtos.Summary(
-                        s.getId(), s.getProductId(), s.getName(), s.getDescription(),
+                        s.getId(), s.getName(), s.getDescription(),
                         List.of(s.getTags()),
                         (int) links.countBySuiteId(s.getId()),
                         s.getCreatedAt(), s.getUpdatedAt()
@@ -157,7 +157,7 @@ public class SuiteService {
             ));
         }
         return new SuiteDtos.View(
-                suite.getId(), suite.getProductId(), suite.getName(), suite.getDescription(),
+                suite.getId(), suite.getName(), suite.getDescription(),
                 List.of(suite.getTags()),
                 suite.getCreatedAt(), suite.getUpdatedAt(),
                 refs

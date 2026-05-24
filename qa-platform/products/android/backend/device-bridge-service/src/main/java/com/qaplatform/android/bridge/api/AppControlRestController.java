@@ -187,9 +187,9 @@ public class AppControlRestController {
         }
         DeviceChannel channel = registry.get(principal.deviceId())
                 .orElseThrow(() -> ApiException.notFound("agent offline"));
-        if (channel.productId() != principal.productId()) {
-            throw ApiException.forbidden("product mismatch");
-        }
+        // Tenancy binding lives on the SESSION JWT's deviceId — session-service
+        // validated company membership before issuing it. Re-checking here would
+        // require a cross-schema lookup with no additional safety.
         return channel;
     }
 

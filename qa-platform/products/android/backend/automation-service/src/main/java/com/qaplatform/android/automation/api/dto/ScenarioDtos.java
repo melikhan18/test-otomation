@@ -32,7 +32,6 @@ public class ScenarioDtos {
     /** Lightweight projection for the scenarios list. */
     public record Summary(
             long id,
-            long productId,
             String name,
             String description,
             List<String> tags,
@@ -45,7 +44,6 @@ public class ScenarioDtos {
     /** Full scenario including ordered steps and the suites it currently belongs to. */
     public record View(
             long id,
-            long productId,
             String name,
             String description,
             List<String> tags,

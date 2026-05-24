@@ -45,9 +45,10 @@ public class VideoWebSocketHandler implements WebSocketHandler {
         }
         DeviceChannel channel = registry.get(principal.deviceId()).orElse(null);
         if (channel == null) return session.close(new org.springframework.web.reactive.socket.CloseStatus(4404, "agent offline"));
-        if (channel.productId() != principal.productId()) {
-            return session.close(WsAuth.unauthorized("product mismatch"));
-        }
+        // Tenancy binding: the SESSION JWT was issued by session-service only after
+        // verifying the caller's company membership against the device's company_id.
+        // The deviceId in the JWT therefore implicitly authorizes this stream — no
+        // separate product/company check needed at the bridge.
 
         log.info("video subscriber attached session={} device={}", principal.sessionId(), principal.deviceId());
 

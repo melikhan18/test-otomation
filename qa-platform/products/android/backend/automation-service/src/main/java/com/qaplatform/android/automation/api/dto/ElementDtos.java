@@ -39,7 +39,6 @@ public class ElementDtos {
 
     public record View(
             long id,
-            long productId,
             String name,
             String description,
             LocatorStrategy primaryStrategy,

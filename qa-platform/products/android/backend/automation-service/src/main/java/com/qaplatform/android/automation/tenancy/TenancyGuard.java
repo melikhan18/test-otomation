@@ -35,13 +35,13 @@ public class TenancyGuard {
                 .orElseThrow(() -> ApiException.notFound("project"));
 
         if (caller.platformAdmin()) {
-            return new ProjectContext(info.projectId(), info.companyId(), info.legacyProductId(), "PLATFORM_ADMIN");
+            return new ProjectContext(info.projectId(), info.companyId(), "PLATFORM_ADMIN");
         }
         if (!caller.isMemberOf(info.companyId())) {
             throw ApiException.forbidden("not a member of this company");
         }
         String role = caller.roleInProject(info.companyId(), info.projectId());
         if (role == null) throw ApiException.forbidden("not a member of this project");
-        return new ProjectContext(info.projectId(), info.companyId(), info.legacyProductId(), role);
+        return new ProjectContext(info.projectId(), info.companyId(), role);
     }
 }

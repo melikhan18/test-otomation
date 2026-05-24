@@ -50,7 +50,7 @@ public class RunService {
                 .orElseThrow(() -> ApiException.notFound("scenario"));
         if (!ctx.projectId().equals(sc.getProjectId())) throw ApiException.forbidden("scenario not in active project");
 
-        RunEntity run = new RunEntity(ctx.legacyProductId(), ctx.projectId(),
+        RunEntity run = new RunEntity(ctx.projectId(),
                 sc.getId(), req.deviceId(), caller.userId(), req.environment());
         run.setScenarioVersion(sc.getVersion());
         if (req.interStepDelayMs() != null) {
@@ -109,7 +109,7 @@ public class RunService {
         }
 
         return raw.stream().map(r -> new RunDtos.Summary(
-                r.getId(), r.getProductId(), r.getScenarioId(),
+                r.getId(), r.getScenarioId(),
                 r.getScenarioId() != null ? names.get(r.getScenarioId()) : null,
                 r.getDeviceId(), r.getEnvironment(), r.getStatus(),
                 r.getTotalSteps(), r.getPassedSteps(), r.getFailedSteps(),
@@ -189,7 +189,7 @@ public class RunService {
                 ))
                 .toList();
         return new RunDtos.View(
-                r.getId(), r.getProductId(), r.getScenarioId(),
+                r.getId(), r.getScenarioId(),
                 sc != null ? sc.getName() : null,
                 r.getScenarioVersion(),
                 r.getDeviceId(), r.getSessionId(), r.getEnvironment(),

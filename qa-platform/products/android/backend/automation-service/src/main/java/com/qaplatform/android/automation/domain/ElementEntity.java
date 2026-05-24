@@ -12,7 +12,6 @@ public class ElementEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "product_id", nullable = false) private Long productId;
     @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(nullable = false, length = 160)         private String name;
     @Column(columnDefinition = "TEXT")              private String description;
@@ -40,8 +39,7 @@ public class ElementEntity {
 
     protected ElementEntity() {}
 
-    public ElementEntity(Long productId, Long projectId, String name, LocatorStrategy primaryStrategy, String primaryValue, Long createdByUserId) {
-        this.productId = productId;
+    public ElementEntity(Long projectId, String name, LocatorStrategy primaryStrategy, String primaryValue, Long createdByUserId) {
         this.projectId = projectId;
         this.name = name;
         this.primaryStrategy = primaryStrategy;
@@ -52,7 +50,6 @@ public class ElementEntity {
     @PreUpdate void touch() { this.updatedAt = Instant.now(); }
 
     public Long getId() { return id; }
-    public Long getProductId() { return productId; }
     public Long getProjectId() { return projectId; }
     public String getName() { return name; }                public void setName(String v) { this.name = v; }
     public String getDescription() { return description; }   public void setDescription(String v) { this.description = v; }

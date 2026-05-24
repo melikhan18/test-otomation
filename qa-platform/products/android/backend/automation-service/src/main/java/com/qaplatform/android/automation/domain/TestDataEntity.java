@@ -11,7 +11,6 @@ public class TestDataEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "product_id", nullable = false) private Long productId;
     @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(nullable = false, length = 160)         private String name;
     @Column(nullable = false, length = 32)          private String environment = "default";
@@ -25,8 +24,7 @@ public class TestDataEntity {
 
     protected TestDataEntity() {}
 
-    public TestDataEntity(Long productId, Long projectId, String name, String environment, String value, Long createdByUserId) {
-        this.productId = productId;
+    public TestDataEntity(Long projectId, String name, String environment, String value, Long createdByUserId) {
         this.projectId = projectId;
         this.name = name;
         this.environment = environment;
@@ -37,7 +35,6 @@ public class TestDataEntity {
     @PreUpdate void touch() { this.updatedAt = Instant.now(); }
 
     public Long getId() { return id; }
-    public Long getProductId() { return productId; }
     public Long getProjectId() { return projectId; }
     public String getName() { return name; }                public void setName(String v) { this.name = v; }
     public String getEnvironment() { return environment; }  public void setEnvironment(String v) { this.environment = v; }

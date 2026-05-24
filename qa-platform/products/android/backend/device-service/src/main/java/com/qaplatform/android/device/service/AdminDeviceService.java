@@ -32,8 +32,9 @@ public class AdminDeviceService {
      * longer belongs to.
      *
      * Side-effects intentionally minimal: any active session, run, or enrollment
-     * token still references the old productId/companyId pair, but those rows
-     * are short-lived enough that a manual cleanup pass isn't needed.
+     * token still references the old companyId, but those rows are short-lived
+     * enough (sessions 30 min, enrollment tokens 15 min) that a manual cleanup
+     * pass isn't needed.
      */
     @Transactional
     public Device reassignCompany(JwtPrincipal caller, long deviceId, long newCompanyId) {

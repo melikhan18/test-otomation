@@ -13,7 +13,6 @@ export type Locator = { strategy: LocatorStrategy; value: string };
 
 export type ElementView = {
   id: number;
-  productId: number;
   name: string;
   description: string | null;
   primaryStrategy: LocatorStrategy;
@@ -52,7 +51,6 @@ export type ElementUpdate = {
 
 export type TestDataView = {
   id: number;
-  productId: number;
   name: string;
   environment: string;
   value: string;
@@ -155,7 +153,6 @@ export type StepView = {
 
 export type ScenarioSummary = {
   id: number;
-  productId: number;
   name: string;
   description: string | null;
   tags: string[];
@@ -173,7 +170,6 @@ export type ParentSuiteRef = {
 
 export type ScenarioView = {
   id: number;
-  productId: number;
   name: string;
   description: string | null;
   tags: string[];
@@ -231,7 +227,6 @@ export const scenarioApi = {
 
 export type SuiteSummary = {
   id: number;
-  productId: number;
   name: string;
   description: string | null;
   tags: string[];
@@ -251,7 +246,6 @@ export type SuiteScenarioRef = {
 
 export type SuiteView = {
   id: number;
-  productId: number;
   name: string;
   description: string | null;
   tags: string[];
@@ -309,7 +303,6 @@ export type StepResultStatus = "PENDING" | "RUNNING" | "PASSED" | "FAILED" | "SK
 
 export type RunSummary = {
   id: number;
-  productId: number;
   scenarioId: number | null;
   scenarioName: string | null;
   deviceId: number | null;
@@ -370,7 +363,6 @@ export type StepResultView = {
 
 export type RunView = {
   id: number;
-  productId: number;
   scenarioId: number | null;
   scenarioName: string | null;
   scenarioVersion: number | null;
@@ -439,7 +431,6 @@ export type SuiteRunStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "ERROR
 
 export type SuiteRunSummary = {
   id: number;
-  productId: number;
   suiteId: number;
   suiteName: string | null;
   deviceId: number | null;
@@ -473,7 +464,6 @@ export type SuiteRunChild = {
 
 export type SuiteRunView = {
   id: number;
-  productId: number;
   suiteId: number;
   suiteName: string | null;
   deviceId: number | null;

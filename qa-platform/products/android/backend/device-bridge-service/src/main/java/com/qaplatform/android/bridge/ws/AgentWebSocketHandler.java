@@ -52,10 +52,9 @@ public class AgentWebSocketHandler implements WebSocketHandler {
             return session.close(WsAuth.unauthorized("agent token required"));
         }
 
-        long deviceId  = principal.deviceId();
-        long productId = principal.productId() == null ? 0L : principal.productId();
-        DeviceChannel channel = registry.attach(deviceId, productId);
-        log.info("agent connected device={} product={}", deviceId, productId);
+        long deviceId = principal.deviceId();
+        DeviceChannel channel = registry.attach(deviceId);
+        log.info("agent connected device={}", deviceId);
 
         Mono<Void> inbound = session.receive()
                 .timeout(heartbeatTimeout)

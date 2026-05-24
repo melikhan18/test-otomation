@@ -173,7 +173,7 @@ public class SuiteRunOrchestrator {
                                        Integer interStepDelayMs, Boolean adaptiveWait,
                                        Long targetAppVersionId, boolean resetHomeAfter,
                                        boolean killProcessAfter) {
-        RunEntity run = new RunEntity(sr.getProductId(), sr.getProjectId(),
+        RunEntity run = new RunEntity(sr.getProjectId(),
                 scenario.getId(), sr.getDeviceId(),
                 sr.getTriggeredByUserId(), sr.getEnvironment());
         run.setScenarioVersion(scenario.getVersion());

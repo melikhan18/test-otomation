@@ -25,7 +25,7 @@ public class TestDataService {
         if (repo.existsByProjectIdAndNameAndEnvironment(ctx.projectId(), req.name(), req.environment())) {
             throw ApiException.conflict("test data with this name + environment already exists");
         }
-        TestDataEntity e = new TestDataEntity(ctx.legacyProductId(), ctx.projectId(),
+        TestDataEntity e = new TestDataEntity(ctx.projectId(),
                 req.name(), req.environment(), req.value(), caller.userId());
         e.setDescription(req.description());
         e.setSensitive(req.sensitive());
@@ -84,7 +84,7 @@ public class TestDataService {
         boolean mask = e.isSensitive() && !revealSensitive;
         String value = mask ? MASKED : e.getValue();
         return new TestDataDtos.View(
-                e.getId(), e.getProductId(), e.getName(), e.getEnvironment(),
+                e.getId(), e.getName(), e.getEnvironment(),
                 value, e.getDescription(), e.isSensitive(), mask,
                 e.getCreatedByUserId(), e.getCreatedAt(), e.getUpdatedAt()
         );

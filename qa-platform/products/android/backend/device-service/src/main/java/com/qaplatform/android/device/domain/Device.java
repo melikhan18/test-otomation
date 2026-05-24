@@ -11,9 +11,6 @@ public class Device {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "product_id", nullable = false)
-    private Long productId;
-
     @Column(name = "company_id", nullable = false)
     private Long companyId;
 
@@ -50,9 +47,8 @@ public class Device {
 
     protected Device() {}
 
-    public Device(Long productId, Long companyId, String serial, String manufacturer, String model,
+    public Device(Long companyId, String serial, String manufacturer, String model,
                   String androidVersion, int screenWidth, int screenHeight, String agentVersion) {
-        this.productId = productId;
         this.companyId = companyId;
         this.serial = serial;
         this.manufacturer = manufacturer;
@@ -64,7 +60,6 @@ public class Device {
     }
 
     public Long getId() { return id; }
-    public Long getProductId() { return productId; }
     public Long getCompanyId() { return companyId; }
     public void setCompanyId(Long v) { this.companyId = v; }
     public boolean isRestricted() { return restricted; }

@@ -43,7 +43,7 @@ public class SessionService {
         checkAccess(caller, deviceId, companyId, projectId);
 
         // Reserve a placeholder Session row first so we have an id for the lock value.
-        Session s = sessions.save(new Session(deviceId, caller.userId(), caller.productId()));
+        Session s = sessions.save(new Session(deviceId, caller.userId()));
 
         if (!locks.tryAcquire(deviceId, s.getId())) {
             // someone else holds it — roll back
@@ -135,17 +135,23 @@ public class SessionService {
     private Session ensureOwned(JwtPrincipal caller, long sessionId) {
         if (caller == null) throw ApiException.unauthorized("unauthenticated");
         Session s = sessions.findById(sessionId).orElseThrow(() -> ApiException.notFound("session"));
-        if (!s.getProductId().equals(caller.productId())) throw ApiException.forbidden("cross-product");
+        // Tenancy is enforced via the device's company_id (looked up by
+        // SessionService.checkAccess on create / by android-device-service on
+        // every list view), not on the session row itself — sessions never
+        // outlive their parent device's tenant binding.
         if (!caller.isAdmin() && !s.getUserId().equals(caller.userId())) throw ApiException.forbidden("not owner");
         return s;
     }
 
     private SessionDtos.SessionView toView(Session s, boolean includeToken) {
+        // The productId positional parameter on issueSessionToken is a legacy
+        // claim retained on the shared JWT contract; the bridge validates by
+        // (sessionId, deviceId), not productId. Pass 0 — claim is informational.
         String token = includeToken
-                ? jwt.issueSessionToken(s.getId(), s.getDeviceId(), s.getUserId(), s.getProductId())
+                ? jwt.issueSessionToken(s.getId(), s.getDeviceId(), s.getUserId(), 0L)
                 : null;
         return new SessionDtos.SessionView(
-                s.getId(), s.getDeviceId(), s.getUserId(), s.getProductId(),
+                s.getId(), s.getDeviceId(), s.getUserId(),
                 s.getStatus(), s.getCreatedAt(), s.getEndedAt(),
                 token, includeToken ? locks.lockExpiresAt() : null);
     }

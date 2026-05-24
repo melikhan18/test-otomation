@@ -25,7 +25,6 @@ public class SuiteDtos {
     /** Lightweight row for the suites list. */
     public record Summary(
             long id,
-            long productId,
             String name,
             String description,
             List<String> tags,
@@ -37,7 +36,6 @@ public class SuiteDtos {
     /** Full suite view including ordered scenario references. */
     public record View(
             long id,
-            long productId,
             String name,
             String description,
             List<String> tags,

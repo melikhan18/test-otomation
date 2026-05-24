@@ -58,7 +58,7 @@ public class SuiteRunService {
         long scenarioCount = suiteScenarios.countBySuiteId(suite.getId());
         if (scenarioCount == 0) throw ApiException.badRequest("suite has no scenarios");
 
-        SuiteRunEntity sr = new SuiteRunEntity(ctx.legacyProductId(), ctx.projectId(),
+        SuiteRunEntity sr = new SuiteRunEntity(ctx.projectId(),
                 suite.getId(), suite.getName(),
                 req.deviceId(), caller.userId(), req.environment());
         // Faz 4 — validate target APK belongs to the same project as the suite.
@@ -143,7 +143,7 @@ public class SuiteRunService {
 
     private SuiteRunDtos.Summary toSummary(SuiteRunEntity sr) {
         return new SuiteRunDtos.Summary(
-                sr.getId(), sr.getProductId(), sr.getSuiteId(), sr.getSuiteName(),
+                sr.getId(), sr.getSuiteId(), sr.getSuiteName(),
                 sr.getDeviceId(), sr.getEnvironment(), sr.getStatus(),
                 sr.getTotalScenarios(), sr.getPassedScenarios(), sr.getFailedScenarios(),
                 sr.getDurationMs(),
@@ -171,7 +171,7 @@ public class SuiteRunService {
         )).toList();
 
         return new SuiteRunDtos.View(
-                sr.getId(), sr.getProductId(), sr.getSuiteId(), sr.getSuiteName(),
+                sr.getId(), sr.getSuiteId(), sr.getSuiteName(),
                 sr.getDeviceId(), sr.getEnvironment(), sr.getStatus(),
                 sr.getTriggerType(), sr.getTriggeredByUserId(),
                 sr.getStartedAt(), sr.getFinishedAt(), sr.getDurationMs(),

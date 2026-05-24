@@ -14,7 +14,6 @@ public class RunEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "product_id", nullable = false) private Long productId;
     @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(name = "suite_id")     private Long suiteId;
     /** Backlink when this run was triggered as part of a {@link SuiteRunEntity}. */
@@ -92,9 +91,8 @@ public class RunEntity {
 
     protected RunEntity() {}
 
-    public RunEntity(Long productId, Long projectId, Long scenarioId, Long deviceId,
+    public RunEntity(Long projectId, Long scenarioId, Long deviceId,
                      Long triggeredByUserId, String environment) {
-        this.productId = productId;
         this.projectId = projectId;
         this.scenarioId = scenarioId;
         this.deviceId = deviceId;
@@ -103,7 +101,6 @@ public class RunEntity {
     }
 
     public Long getId() { return id; }
-    public Long getProductId() { return productId; }
     public Long getProjectId() { return projectId; }
     public Long getSuiteId() { return suiteId; }              public void setSuiteId(Long v) { this.suiteId = v; }
     public Long getSuiteRunId() { return suiteRunId; }        public void setSuiteRunId(Long v) { this.suiteRunId = v; }

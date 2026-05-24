@@ -38,7 +38,7 @@ public class ScenarioService {
 
     @Transactional
     public ScenarioDtos.View create(JwtPrincipal caller, ProjectContext ctx, ScenarioDtos.CreateRequest req) {
-        ScenarioEntity s = new ScenarioEntity(ctx.legacyProductId(), ctx.projectId(),
+        ScenarioEntity s = new ScenarioEntity(ctx.projectId(),
                 req.name().trim(), caller.userId());
         s.setDescription(req.description());
         s.setTags(toArray(req.tags()));
@@ -74,7 +74,7 @@ public class ScenarioService {
         List<ScenarioEntity> raw = scenarios.findAllByProjectIdOrderByUpdatedAtDesc(ctx.projectId());
         return raw.stream().map(s ->
             new ScenarioDtos.Summary(
-                s.getId(), s.getProductId(), s.getName(), s.getDescription(),
+                s.getId(), s.getName(), s.getDescription(),
                 List.of(s.getTags()), s.getVersion(),
                 (int) steps.countByScenarioId(s.getId()),
                 s.getCreatedAt(), s.getUpdatedAt()
@@ -248,7 +248,7 @@ public class ScenarioService {
         parentRefs.sort((a, b) -> a.name().compareToIgnoreCase(b.name()));
 
         return new ScenarioDtos.View(
-                sc.getId(), sc.getProductId(), sc.getName(), sc.getDescription(),
+                sc.getId(), sc.getName(), sc.getDescription(),
                 List.of(sc.getTags()), sc.getPreconditions(),
                 sc.getVersion(), sc.getCreatedAt(), sc.getUpdatedAt(),
                 stepViews,
