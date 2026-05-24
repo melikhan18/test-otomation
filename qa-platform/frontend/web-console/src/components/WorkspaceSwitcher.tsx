@@ -25,7 +25,7 @@ const PLATFORM_OPTIONS: PlatformOption[] = [
   { value: "ANDROID", label: "Android",         description: "Mobile UI tests",      available: true,  icon: <Smartphone size={12} /> },
   { value: "IOS",     label: "iOS",             description: "Mobile UI tests",      available: false, icon: <Smartphone size={12} /> },
   { value: "BACKEND", label: "Backend / API",   description: "REST / GraphQL tests", available: false, icon: <Layers size={12} /> },
-  { value: "WEB",     label: "Web",             description: "Browser e2e tests",    available: false, icon: <Globe size={12} /> },
+  { value: "WEB",     label: "Web",             description: "Browser e2e tests",    available: true,  icon: <Globe size={12} /> },
 ];
 
 /**

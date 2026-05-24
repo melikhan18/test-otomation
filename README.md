@@ -177,9 +177,10 @@ Kapsamlı kurulum + ilk cihaz bağlama → [`qa-platform/BASLANGIC.md`](qa-platf
 - ✅ **Android stack** — canlı, üretim kullanımına yakın
 - ✅ **Multi-platform kernel** — auth, tenant, reports, run-engine SPI hazır (F0–Final refactor, 2026-05)
 - ✅ **Platform template** — yeni stack için kopya-kaynak
+- ✅ **Web stack v1** — Playwright server-side runner, monolithic deployment, 27-action step DSL, frontend entegrasyonu (2026-05)
 - 🔜 **iOS stack** — WebDriverAgent tabanlı session/bridge/agent (~3-4 hafta)
 - 🔜 **Backend stack** — stateless HTTP test runner (cihaz yok, bridge yok, ~1-2 hafta)
-- 🔜 **Web stack** — Playwright/Cypress headless browser runner
+- 🔜 **Web stack v1.5** — Local tunnel CLI (kullanıcı localhost'unu test edebilsin)
 - 🔜 **Dashboard widget** — reports-aggregator verisinden cross-platform success-rate grafiği
 
 ---

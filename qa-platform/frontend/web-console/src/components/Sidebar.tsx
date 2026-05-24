@@ -1,38 +1,46 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  BarChart3, Building2, Database, FolderKanban, FolderOpen, LogOut, Monitor, Moon,
+  BarChart3, Building2, Database, FolderKanban, FolderOpen, Globe, LogOut, Monitor, Moon,
   Package, ShieldCheck, Smartphone, Sun, Target, UserCircle2, UserCog, Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useAuthStore, useEffectiveRole, type EffectiveRole } from "@/store/auth";
+import { useAuthStore, useEffectiveRole, type EffectiveRole, type Platform } from "@/store/auth";
 import { useThemeStore, type ThemeMode } from "@/theme";
 import WorkspaceSwitcher from "@/components/WorkspaceSwitcher";
 
 type NavItem = { to: string; label: string; icon: React.ReactNode };
 type NavSection = { title: string; items: NavItem[] };
 
-function buildSections(platformAdmin: boolean, role: EffectiveRole): NavSection[] {
+function buildSections(platformAdmin: boolean, role: EffectiveRole, platform: Platform): NavSection[] {
   const isOwner   = role === "OWNER";
   const isManager = role === "QA_MANAGER" || isOwner;
 
-  const sections: NavSection[] = [
-    {
-      title: "Workspace",
-      items: [
-        { to: "/devices", label: "Devices", icon: <Smartphone size={16} /> },
-      ],
-    },
-    {
-      title: "Automation",
-      items: [
+  // Platform-aware Automation section. Android keeps its full multi-page
+  // shape (workspace + elements + test data + apps + reports). Web ships
+  // with a single consolidated page in v1 — no element catalog / test data
+  // / app prep yet.
+  const automationItems: NavItem[] = platform === "WEB"
+    ? [
+        { to: "/automation/web",     label: "Web",     icon: <Globe size={16} /> },
+        { to: "/automation/reports", label: "Reports", icon: <BarChart3 size={16} /> },
+      ]
+    : [
         { to: "/automation/workspace", label: "Workspace", icon: <FolderKanban size={16} /> },
         { to: "/automation/reports",   label: "Reports",   icon: <BarChart3 size={16} /> },
         { to: "/automation/elements",  label: "Elements",  icon: <Target size={16} /> },
         { to: "/automation/data",      label: "Test data", icon: <Database size={16} /> },
         { to: "/automation/apps",      label: "Apps",      icon: <Package size={16} /> },
-      ],
-    },
-  ];
+      ];
+
+  // Top-level "Devices" link only makes sense for platforms with physical
+  // devices (Android today; iOS once it lands). Web has no device list.
+  const workspaceItems: NavItem[] = platform === "WEB"
+    ? []
+    : [{ to: "/devices", label: "Devices", icon: <Smartphone size={16} /> }];
+
+  const sections: NavSection[] = [];
+  if (workspaceItems.length > 0) sections.push({ title: "Workspace", items: workspaceItems });
+  sections.push({ title: "Automation", items: automationItems });
 
   // Settings — hide everything except Account from TESTERs. QA_MANAGERs keep
   // Projects (so they can drill into the one they manage); Company + Members
@@ -65,10 +73,11 @@ export default function Sidebar() {
   const username = useAuthStore((s) => s.username);
   const role = useAuthStore((s) => s.role);
   const platformAdmin = useAuthStore((s) => s.platformAdmin);
+  const activePlatform = useAuthStore((s) => s.activePlatform);
   const logout = useAuthStore((s) => s.logout);
   const effectiveRole = useEffectiveRole();
 
-  const sections = buildSections(platformAdmin, effectiveRole);
+  const sections = buildSections(platformAdmin, effectiveRole, activePlatform);
 
   return (
     <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-surface-border bg-surface-raised overflow-hidden">
@@ -81,8 +90,8 @@ export default function Sidebar() {
             <Smartphone size={16} className="text-brand-400" />
           </div>
           <div>
-            <div className="text-sm font-semibold leading-tight text-ink-primary">Device Platform</div>
-            <div className="text-[10px] text-ink-muted leading-tight">Mobile QA Cloud</div>
+            <div className="text-sm font-semibold leading-tight text-ink-primary">QA Platform</div>
+            <div className="text-[10px] text-ink-muted leading-tight">Multi-platform QA Cloud</div>
           </div>
         </div>
         <div className="pb-3">
