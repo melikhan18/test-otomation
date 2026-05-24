@@ -35,6 +35,21 @@ public class WebStepEntity {
     @Column(columnDefinition = "TEXT") private String selector;
     @Column(columnDefinition = "TEXT") private String value;
 
+    /**
+     * Optional catalog ref. When set, takes precedence over the literal
+     * {@link #selector} — the executor uses the linked element's locator
+     * stack (primary + fallbacks). ON DELETE SET NULL: deleting an element
+     * leaves the step broken-but-visible so the user can repoint it.
+     */
+    @Column(name = "target_element_id") private Long targetElementId;
+
+    /**
+     * Optional catalog ref. When set, takes precedence over the literal
+     * {@link #value} — the executor pulls the linked test-data row's
+     * value, respecting the run's environment.
+     */
+    @Column(name = "data_id") private Long dataId;
+
     @Column(name = "timeout_ms", nullable = false)
     private int timeoutMs = 5000;
 
@@ -58,6 +73,8 @@ public class WebStepEntity {
     public WebStepAction getAction() { return action; }     public void setAction(WebStepAction v) { this.action = v; }
     public String getSelector() { return selector; }        public void setSelector(String v) { this.selector = v; }
     public String getValue() { return value; }              public void setValue(String v) { this.value = v; }
+    public Long getTargetElementId() { return targetElementId; } public void setTargetElementId(Long v) { this.targetElementId = v; }
+    public Long getDataId() { return dataId; }                   public void setDataId(Long v) { this.dataId = v; }
     public int getTimeoutMs() { return timeoutMs; }         public void setTimeoutMs(int v) { this.timeoutMs = v; }
     public boolean isScreenshotAfter() { return screenshotAfter; } public void setScreenshotAfter(boolean v) { this.screenshotAfter = v; }
     public Instant getCreatedAt() { return createdAt; }

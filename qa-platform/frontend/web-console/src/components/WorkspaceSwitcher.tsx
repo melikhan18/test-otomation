@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Building2, Check, ChevronsUpDown, FolderOpen, FolderPlus, Globe, Layers, Plus, Smartphone,
 } from "lucide-react";
 import {
   useActiveCompany, useActiveProject, useAuthStore, type Platform,
 } from "@/store/auth";
+
+/** Default landing route for each platform after a switch. */
+function platformHome(p: Platform): string {
+  switch (p) {
+    case "WEB":     return "/automation/web";
+    case "ANDROID": return "/devices";
+    case "IOS":     return "/devices";
+    case "BACKEND": return "/automation/workspace";
+  }
+}
 import { cn } from "@/lib/cn";
 import NewCompanyDialog from "@/components/NewCompanyDialog";
 import NewProjectDialog from "@/components/NewProjectDialog";
@@ -42,6 +53,7 @@ export default function WorkspaceSwitcher() {
   const setActiveCompany = useAuthStore((s) => s.setActiveCompany);
   const setActiveProject = useAuthStore((s) => s.setActiveProject);
   const setActivePlatform = useAuthStore((s) => s.setActivePlatform);
+  const nav = useNavigate();
 
   const [newCompanyOpen, setNewCompanyOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -131,13 +143,21 @@ export default function WorkspaceSwitcher() {
           </button>
         ) : null}
       />
-      {/* Platform picker — 4th tenancy dimension. Backend currently only serves
-       *  ANDROID; IOS / BACKEND / WEB are placeholders showing the roadmap so
-       *  the architecture is visible. They're rendered disabled with "soon"
-       *  badges until their stacks come online. */}
+      {/* Platform picker — 4th tenancy dimension. ANDROID + WEB are live; IOS
+       *  and BACKEND are placeholders showing the roadmap until their stacks
+       *  come online.
+       *
+       *  Switching platform also navigates to that platform's home — keeps the
+       *  user from sitting on a /automation/web URL after switching to ANDROID
+       *  (where Run buttons would post WEB-shaped payloads to the Android
+       *  backend and fail with "deviceId: required"). */}
       <PlatformPicker
         active={activePlatformOption}
-        onSelect={(p) => { if (p.available) setActivePlatform(p.value); }}
+        onSelect={(p) => {
+          if (!p.available || p.value === activePlatform) return;
+          setActivePlatform(p.value);
+          nav(platformHome(p.value));
+        }}
       />
 
       {newCompanyOpen && <NewCompanyDialog onClose={() => setNewCompanyOpen(false)} />}

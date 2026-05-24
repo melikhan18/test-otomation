@@ -9,8 +9,10 @@ import { Spinner } from "@/components/ui/Spinner";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/cn";
 import {
-  browserApi, webRunApi, webScenarioApi, WEB_STEP_ACTIONS, WEB_STEP_ACTION_MAP,
-  type BrowserProfile, type WebRunSummary, type WebScenarioSummary, type WebStepAction, type WebStepCreate, type WebStepView,
+  browserApi, webElementApi, webRunApi, webScenarioApi, webTestDataApi,
+  WEB_STEP_ACTIONS, WEB_STEP_ACTION_MAP,
+  type BrowserProfile, type WebElementView, type WebRunSummary,
+  type WebScenarioSummary, type WebStepAction, type WebStepCreate, type WebStepView, type WebTestDataView,
 } from "@/lib/webAutomation";
 
 /**
@@ -245,9 +247,21 @@ function StepRow({ step, onDelete }: { step: WebStepView; onDelete: () => void }
 
 function AddStepForm({ onAdd, busy }: { onAdd: (b: WebStepCreate) => void; busy: boolean }) {
   const [action, setAction] = useState<WebStepAction>("GOTO");
+
+  // Each field has its own mode: "literal" (free text) or "catalog" (pick by id).
+  // Defaults to literal so back-compat smoke tests still work.
+  const [selectorMode, setSelectorMode] = useState<"literal" | "catalog">("literal");
   const [selector, setSelector] = useState("");
+  const [targetElementId, setTargetElementId] = useState<number | null>(null);
+
+  const [valueMode, setValueMode] = useState<"literal" | "catalog">("literal");
   const [value, setValue] = useState("");
+  const [dataId, setDataId] = useState<number | null>(null);
+
   const def = WEB_STEP_ACTION_MAP[action];
+
+  const elementsQ = useQuery({ queryKey: ["web-elements"], queryFn: webElementApi.list });
+  const dataQ     = useQuery({ queryKey: ["web-test-data"], queryFn: webTestDataApi.list });
 
   const grouped = useMemo(() => {
     const cats: Record<string, typeof WEB_STEP_ACTIONS> = {};
@@ -256,15 +270,24 @@ function AddStepForm({ onAdd, busy }: { onAdd: (b: WebStepCreate) => void; busy:
   }, []);
 
   function submit() {
-    if (def.needsSelector && !selector.trim()) return;
-    if (def.needsValue && !value.trim()) return;
+    if (def.needsSelector && selectorMode === "literal" && !selector.trim()) return;
+    if (def.needsSelector && selectorMode === "catalog" && targetElementId == null) return;
+    if (def.needsValue && valueMode === "literal" && !value.trim()) return;
+    if (def.needsValue && valueMode === "catalog" && dataId == null) return;
+
     onAdd({
       action,
-      selector: def.needsSelector ? selector.trim() : null,
-      value:    def.needsValue ? value.trim() : null,
+      // Backend prefers catalog refs when both literal + ref are set; we
+      // only send the chosen mode for clarity in the report payload.
+      selector:        def.needsSelector && selectorMode === "literal" ? selector.trim() : null,
+      targetElementId: def.needsSelector && selectorMode === "catalog" ? targetElementId : null,
+      value:           def.needsValue && valueMode === "literal" ? value.trim() : null,
+      dataId:          def.needsValue && valueMode === "catalog" ? dataId : null,
     });
     setSelector("");
     setValue("");
+    setTargetElementId(null);
+    setDataId(null);
   }
 
   return (
@@ -299,25 +322,45 @@ function AddStepForm({ onAdd, busy }: { onAdd: (b: WebStepCreate) => void; busy:
 
         {def.needsSelector && (
           <div>
-            <span className="label block mb-1">Selector</span>
-            <input
-              value={selector}
-              onChange={(e) => setSelector(e.target.value)}
-              placeholder="CSS / XPath / text= / role= (Playwright syntax)"
-              className="w-full h-7 px-2 rounded-md border border-surface-border bg-surface text-xs font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
+            <FieldModeToggle label="Selector" mode={selectorMode} onChange={setSelectorMode} catalogLabel="From elements" />
+            {selectorMode === "literal" ? (
+              <input
+                value={selector}
+                onChange={(e) => setSelector(e.target.value)}
+                placeholder="CSS / XPath / text= / role= (Playwright syntax)"
+                className="w-full h-7 px-2 rounded-md border border-surface-border bg-surface text-xs font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            ) : (
+              <select value={targetElementId ?? ""} onChange={(e) => setTargetElementId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full h-7 px-2 rounded-md border border-surface-border bg-surface text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                <option value="">{elementsQ.data?.length === 0 ? "No elements — save one on the Elements page" : "Pick an element…"}</option>
+                {(elementsQ.data ?? []).map((el: WebElementView) => (
+                  <option key={el.id} value={el.id}>{el.name} · {el.primaryStrategy}</option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 
         {def.needsValue && (
           <div>
-            <span className="label block mb-1">Value</span>
-            <input
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder={def.valueLabel ?? ""}
-              className="w-full h-7 px-2 rounded-md border border-surface-border bg-surface text-xs font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
-            />
+            <FieldModeToggle label="Value" mode={valueMode} onChange={setValueMode} catalogLabel="From test data" />
+            {valueMode === "literal" ? (
+              <input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder={def.valueLabel ?? ""}
+                className="w-full h-7 px-2 rounded-md border border-surface-border bg-surface text-xs font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            ) : (
+              <select value={dataId ?? ""} onChange={(e) => setDataId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full h-7 px-2 rounded-md border border-surface-border bg-surface text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                <option value="">{dataQ.data?.length === 0 ? "No test data — save one on the Test data page" : "Pick test data…"}</option>
+                {(dataQ.data ?? []).map((td: WebTestDataView) => (
+                  <option key={td.id} value={td.id}>{td.name} · {td.environment}{td.sensitive ? " 🔒" : ""}</option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 
@@ -325,13 +368,43 @@ function AddStepForm({ onAdd, busy }: { onAdd: (b: WebStepCreate) => void; busy:
           variant="primary"
           leftIcon={<Plus size={12} />}
           loading={busy}
-          disabled={(def.needsSelector && !selector.trim()) || (def.needsValue && !value.trim())}
+          disabled={
+            (def.needsSelector && selectorMode === "literal" && !selector.trim()) ||
+            (def.needsSelector && selectorMode === "catalog" && targetElementId == null) ||
+            (def.needsValue && valueMode === "literal" && !value.trim()) ||
+            (def.needsValue && valueMode === "catalog" && dataId == null)
+          }
           onClick={submit}
         >
           Add step
         </Button>
       </div>
     </Card>
+  );
+}
+
+function FieldModeToggle({ label, mode, onChange, catalogLabel }: {
+  label: string;
+  mode: "literal" | "catalog";
+  onChange: (m: "literal" | "catalog") => void;
+  catalogLabel: string;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-1">
+      <span className="label">{label}</span>
+      <div className="flex border border-surface-border rounded-md overflow-hidden">
+        <button onClick={() => onChange("literal")}
+                className={cn("px-2 h-5 text-[9px] uppercase tracking-wider transition-colors",
+                  mode === "literal" ? "bg-brand-500/15 text-brand-300" : "text-ink-muted hover:text-ink-primary")}>
+          Literal
+        </button>
+        <button onClick={() => onChange("catalog")}
+                className={cn("px-2 h-5 text-[9px] uppercase tracking-wider transition-colors border-l border-surface-border",
+                  mode === "catalog" ? "bg-brand-500/15 text-brand-300" : "text-ink-muted hover:text-ink-primary")}>
+          {catalogLabel}
+        </button>
+      </div>
+    </div>
   );
 }
 

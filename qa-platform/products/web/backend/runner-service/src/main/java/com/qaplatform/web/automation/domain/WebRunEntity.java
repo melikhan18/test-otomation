@@ -20,6 +20,9 @@ public class WebRunEntity {
     @Column(name = "scenario_id")                  private Long scenarioId;
     @Column(name = "scenario_version")             private Integer scenarioVersion;
 
+    /** Backlink when this run was triggered as part of a {@link WebSuiteRunEntity}. */
+    @Column(name = "suite_run_id") private Long suiteRunId;
+
     /** References a static BrowserCatalog entry by id (e.g. "desktop-chrome-1080p"). */
     @Column(name = "browser_profile_id", nullable = false, length = 64)
     private String browserProfileId;
@@ -67,6 +70,7 @@ public class WebRunEntity {
     public Long getProjectId() { return projectId; }
     public Long getScenarioId() { return scenarioId; }
     public Integer getScenarioVersion() { return scenarioVersion; } public void setScenarioVersion(Integer v) { this.scenarioVersion = v; }
+    public Long getSuiteRunId() { return suiteRunId; }              public void setSuiteRunId(Long v) { this.suiteRunId = v; }
     public String getBrowserProfileId() { return browserProfileId; }
     public String getEnvironment() { return environment; }
     public RunStatus getStatus() { return status; }                 public void setStatus(RunStatus v) { this.status = v; }

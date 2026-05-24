@@ -1,5 +1,5 @@
 import { api } from "./api";
-import type { RunStatus, StepResultStatus } from "./automation";
+import type { RunStatus, StepResultStatus, SuiteRunStatus } from "./automation";
 
 /* ──────────────────────────  Browser catalog  ────────────────────────── */
 
@@ -106,6 +106,10 @@ export type WebStepView = {
   action: WebStepAction;
   selector: string | null;
   value: string | null;
+  /** Catalog ref — takes precedence over selector when set. */
+  targetElementId: number | null;
+  /** Catalog ref — takes precedence over value when set. */
+  dataId: number | null;
   timeoutMs: number;
   screenshotAfter: boolean;
   createdAt: string;
@@ -140,6 +144,10 @@ export type WebStepCreate = {
   action: WebStepAction;
   selector?: string | null;
   value?: string | null;
+  /** Catalog reference — takes precedence over `selector` when set. */
+  targetElementId?: number | null;
+  /** Catalog reference — takes precedence over `value` when set. */
+  dataId?: number | null;
   timeoutMs?: number | null;
   screenshotAfter?: boolean | null;
   /** Insertion index (0-based). null = append at end. */
@@ -229,4 +237,189 @@ export const webRunApi = {
     api.get<WebRunSummary[]>("/api/runs", { params: scenarioId ? { scenarioId } : {} }).then((r) => r.data),
   get:    (id: number) => api.get<WebRunView>(`/api/runs/${id}`).then((r) => r.data),
   create: (body: WebRunCreate) => api.post<WebRunView>("/api/runs", body).then((r) => r.data),
+};
+
+/* ──────────────────────────  Element catalog  ───────────────────────── */
+
+export type WebLocatorStrategy = "CSS" | "XPATH" | "ROLE" | "TEXT" | "TEST_ID";
+
+export type WebLocator = { strategy: WebLocatorStrategy; value: string };
+
+export type WebElementView = {
+  id: number;
+  name: string;
+  description: string | null;
+  primaryStrategy: WebLocatorStrategy;
+  primaryValue: string;
+  fallbackLocators: WebLocator[];
+  createdByUserId: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WebElementCreate = {
+  name: string;
+  description?: string | null;
+  primaryStrategy: WebLocatorStrategy;
+  primaryValue: string;
+  fallbackLocators?: WebLocator[];
+};
+export type WebElementUpdate = WebElementCreate;
+
+export const webElementApi = {
+  list:   () => api.get<WebElementView[]>("/api/elements").then((r) => r.data),
+  get:    (id: number) => api.get<WebElementView>(`/api/elements/${id}`).then((r) => r.data),
+  create: (body: WebElementCreate) => api.post<WebElementView>("/api/elements", body).then((r) => r.data),
+  update: (id: number, body: WebElementUpdate) =>
+    api.put<WebElementView>(`/api/elements/${id}`, body).then((r) => r.data),
+  delete: (id: number) => api.delete<void>(`/api/elements/${id}`).then((r) => r.data),
+};
+
+/* ──────────────────────────  Test data  ─────────────────────────────── */
+
+export type WebTestDataView = {
+  id: number;
+  name: string;
+  environment: string;
+  value: string;       // "••••••••" when sensitive && !masked override
+  description: string | null;
+  sensitive: boolean;
+  masked: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WebTestDataCreate = {
+  name: string;
+  environment: string;
+  value: string;
+  description?: string | null;
+  sensitive?: boolean;
+};
+export type WebTestDataUpdate = WebTestDataCreate;
+
+export const webTestDataApi = {
+  list:   () => api.get<WebTestDataView[]>("/api/test-data").then((r) => r.data),
+  get:    (id: number, reveal = false) =>
+    api.get<WebTestDataView>(`/api/test-data/${id}`, { params: { reveal } }).then((r) => r.data),
+  create: (body: WebTestDataCreate) => api.post<WebTestDataView>("/api/test-data", body).then((r) => r.data),
+  update: (id: number, body: WebTestDataUpdate) =>
+    api.put<WebTestDataView>(`/api/test-data/${id}`, body).then((r) => r.data),
+  delete: (id: number) => api.delete<void>(`/api/test-data/${id}`).then((r) => r.data),
+  environments: () => api.get<string[]>("/api/test-data/environments").then((r) => r.data),
+};
+
+/* ──────────────────────────  Suites  ────────────────────────────────── */
+
+export type WebSuiteScenarioRef = {
+  scenarioId: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  stepCount: number;
+  orderIndex: number;
+};
+
+export type WebSuiteSummary = {
+  id: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  scenarioCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WebSuiteView = {
+  id: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  scenarios: WebSuiteScenarioRef[];
+};
+
+export type WebSuiteCreate = { name: string; description?: string | null; tags?: string[] };
+export type WebSuiteUpdate = WebSuiteCreate;
+
+export const webSuiteApi = {
+  list:   () => api.get<WebSuiteSummary[]>("/api/suites").then((r) => r.data),
+  get:    (id: number) => api.get<WebSuiteView>(`/api/suites/${id}`).then((r) => r.data),
+  create: (body: WebSuiteCreate) => api.post<WebSuiteView>("/api/suites", body).then((r) => r.data),
+  update: (id: number, body: WebSuiteUpdate) => api.put<WebSuiteView>(`/api/suites/${id}`, body).then((r) => r.data),
+  delete: (id: number) => api.delete<void>(`/api/suites/${id}`).then((r) => r.data),
+
+  addScenario: (suiteId: number, scenarioId: number) =>
+    api.post<WebSuiteView>(`/api/suites/${suiteId}/scenarios`, { scenarioId }).then((r) => r.data),
+  removeScenario: (suiteId: number, scenarioId: number) =>
+    api.delete<void>(`/api/suites/${suiteId}/scenarios/${scenarioId}`).then((r) => r.data),
+  reorderScenarios: (suiteId: number, scenarioIds: number[]) =>
+    api.post<void>(`/api/suites/${suiteId}/scenarios/reorder`, { scenarioIds }).then((r) => r.data),
+};
+
+/* ──────────────────────────  Suite runs  ────────────────────────────── */
+
+export type WebSuiteRunChild = {
+  id: number;
+  scenarioId: number | null;
+  scenarioName: string | null;
+  status: RunStatus;
+  totalSteps: number;
+  passedSteps: number;
+  failedSteps: number;
+  durationMs: number | null;
+  videoUrl: string | null;
+  traceUrl: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type WebSuiteRunSummary = {
+  id: number;
+  suiteId: number;
+  suiteName: string | null;
+  browserProfileId: string;
+  environment: string;
+  status: SuiteRunStatus;
+  totalScenarios: number;
+  passedScenarios: number;
+  failedScenarios: number;
+  durationMs: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type WebSuiteRunView = {
+  id: number;
+  suiteId: number;
+  suiteName: string | null;
+  browserProfileId: string;
+  environment: string;
+  status: SuiteRunStatus;
+  triggeredByUserId: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  totalScenarios: number;
+  passedScenarios: number;
+  failedScenarios: number;
+  errorSummary: string | null;
+  createdAt: string;
+  runs: WebSuiteRunChild[];
+};
+
+export type WebSuiteRunCreate = {
+  suiteId: number;
+  browserProfileId: string;
+  environment?: string;
+};
+
+export const webSuiteRunApi = {
+  list:   (suiteId?: number) =>
+    api.get<WebSuiteRunSummary[]>("/api/suite-runs", { params: suiteId ? { suiteId } : {} }).then((r) => r.data),
+  get:    (id: number) => api.get<WebSuiteRunView>(`/api/suite-runs/${id}`).then((r) => r.data),
+  create: (body: WebSuiteRunCreate) => api.post<WebSuiteRunView>("/api/suite-runs", body).then((r) => r.data),
 };

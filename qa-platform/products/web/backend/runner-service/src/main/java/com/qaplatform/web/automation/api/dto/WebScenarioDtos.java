@@ -52,6 +52,10 @@ public class WebScenarioDtos {
             @NotNull WebStepAction action,
             String selector,
             String value,
+            /** Catalog ref — when set, takes precedence over `selector`. */
+            Long targetElementId,
+            /** Catalog ref — when set, takes precedence over `value`. */
+            Long dataId,
             @Min(0) Integer timeoutMs,
             Boolean screenshotAfter,
             /** Insertion index (0-based). When null → append at end. */
@@ -62,6 +66,8 @@ public class WebScenarioDtos {
             @NotNull WebStepAction action,
             String selector,
             String value,
+            Long targetElementId,
+            Long dataId,
             @Min(0) Integer timeoutMs,
             Boolean screenshotAfter
     ) {}
@@ -75,6 +81,8 @@ public class WebScenarioDtos {
             WebStepAction action,
             String selector,
             String value,
+            Long targetElementId,
+            Long dataId,
             int timeoutMs,
             boolean screenshotAfter,
             Instant createdAt
