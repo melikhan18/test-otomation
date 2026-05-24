@@ -44,9 +44,8 @@ public class ControlWebSocketHandler implements WebSocketHandler {
         }
         DeviceChannel channel = registry.get(principal.deviceId()).orElse(null);
         if (channel == null) return session.close(new org.springframework.web.reactive.socket.CloseStatus(4404, "agent offline"));
-        if (channel.productId() != principal.productId()) {
-            return session.close(WsAuth.unauthorized("product mismatch"));
-        }
+        // Tenancy binding: see VideoWebSocketHandler — the session JWT's deviceId is
+        // already the tenant boundary (session-service authorized it on reservation).
 
         log.info("control attached session={} device={}", principal.sessionId(), principal.deviceId());
 

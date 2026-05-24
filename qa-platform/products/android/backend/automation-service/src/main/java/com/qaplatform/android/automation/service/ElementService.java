@@ -23,7 +23,7 @@ public class ElementService {
         if (repo.existsByProjectIdAndName(ctx.projectId(), req.name())) {
             throw ApiException.conflict("element name already exists in this project");
         }
-        ElementEntity e = new ElementEntity(ctx.legacyProductId(), ctx.projectId(),
+        ElementEntity e = new ElementEntity(ctx.projectId(),
                 req.name(), req.primaryStrategy(), req.primaryValue(), caller.userId());
         e.setDescription(req.description());
         e.setFallbackLocatorsJson(LocatorJson.write(req.fallbackLocators()));
@@ -76,7 +76,7 @@ public class ElementService {
 
     private ElementDtos.View toView(ElementEntity e) {
         return new ElementDtos.View(
-                e.getId(), e.getProductId(), e.getName(), e.getDescription(),
+                e.getId(), e.getName(), e.getDescription(),
                 e.getPrimaryStrategy(), e.getPrimaryValue(),
                 LocatorJson.read(e.getFallbackLocatorsJson()),
                 e.getScreenshotData(), e.getSampleBounds(),

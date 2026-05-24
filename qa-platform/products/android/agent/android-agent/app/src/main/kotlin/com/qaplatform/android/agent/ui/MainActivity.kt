@@ -116,7 +116,7 @@ private fun AgentApp() {
                     Text("Status", style = MaterialTheme.typography.titleMedium)
                     Text(when {
                         state == null -> "loading…"
-                        enrolled -> "enrolled · device #${state!!.deviceId} (product ${state!!.productId})"
+                        enrolled -> "enrolled · device #${state!!.deviceId}"
                         else -> "not enrolled"
                     })
                     if (enrolled) {
@@ -163,7 +163,7 @@ private fun AgentApp() {
                             val result = EnrollmentClient().enroll(backendUrl.trim(), req)
                             result.fold(
                                 onSuccess = { resp ->
-                                    prefs.saveEnrollment(backendUrl.trim(), deriveWsUrl(backendUrl), resp.agentToken, resp.deviceId, resp.productId)
+                                    prefs.saveEnrollment(backendUrl.trim(), deriveWsUrl(backendUrl), resp.agentToken, resp.deviceId)
                                     status = "enrolled — requesting screen capture"
                                     val pm = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                                     projectionLauncher.launch(pm.createScreenCaptureIntent())
@@ -247,7 +247,7 @@ private fun AgentApp() {
                                 val result = EnrollmentClient().enroll(backendUrl.trim(), req)
                                 result.fold(
                                     onSuccess = { resp ->
-                                        prefs.saveEnrollment(backendUrl.trim(), deriveWsUrl(backendUrl), resp.agentToken, resp.deviceId, resp.productId)
+                                        prefs.saveEnrollment(backendUrl.trim(), deriveWsUrl(backendUrl), resp.agentToken, resp.deviceId)
                                         status = "re-enrolled — requesting screen capture"
                                         val pm = ctx.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                                         projectionLauncher.launch(pm.createScreenCaptureIntent())

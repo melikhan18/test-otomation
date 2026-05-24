@@ -8,7 +8,7 @@ import java.time.Instant;
 public class DeviceDtos {
     public enum DeviceStatus { ONLINE, OFFLINE, IN_USE }
 
-    public record DeviceView(long id, long productId, String serial, String manufacturer, String model,
+    public record DeviceView(long id, String serial, String manufacturer, String model,
                              String androidVersion, int screenWidth, int screenHeight,
                              String agentVersion, Instant enrolledAt, Instant lastSeenAt,
                              DeviceStatus status, Long currentSessionId) {}
@@ -18,7 +18,7 @@ public class DeviceDtos {
      * and {@code restricted} so the UI can render a tenant column and the per-row
      * access toggle without an extra round-trip.
      */
-    public record AdminDeviceView(long id, long productId, Long companyId, String serial,
+    public record AdminDeviceView(long id, Long companyId, String serial,
                                    String manufacturer, String model,
                                    String androidVersion, int screenWidth, int screenHeight,
                                    String agentVersion, Instant enrolledAt, Instant lastSeenAt,
@@ -39,7 +39,7 @@ public class DeviceDtos {
                                 @Min(1) int screenHeight,
                                 String agentVersion) {}
 
-    public record EnrollResponse(long deviceId, long productId, String agentToken, String wsUrl) {}
+    public record EnrollResponse(long deviceId, String agentToken, String wsUrl) {}
 
     public record HeartbeatRequest(String agentVersion) {}
 }

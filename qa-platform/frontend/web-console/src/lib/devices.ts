@@ -4,7 +4,6 @@ export type DeviceStatus = "ONLINE" | "OFFLINE" | "IN_USE";
 
 export type Device = {
   id: number;
-  productId: number;
   serial: string;
   manufacturer: string;
   model: string;

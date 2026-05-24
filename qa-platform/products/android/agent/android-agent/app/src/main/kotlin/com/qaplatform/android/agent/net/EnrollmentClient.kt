@@ -29,7 +29,6 @@ class EnrollmentClient(private val http: OkHttpClient = defaultClient) {
     @Serializable
     data class EnrollResponse(
         val deviceId: Long,
-        val productId: Long,
         val agentToken: String,
         val wsUrl: String,
     )

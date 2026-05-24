@@ -30,7 +30,6 @@ public class DeviceChannel {
     private static final Logger log = LoggerFactory.getLogger(DeviceChannel.class);
 
     private final long deviceId;
-    private final long productId;
     private final Sinks.Many<Frame> agentToWeb;
     private final Sinks.Many<Frame> webToAgent;
     private final AtomicReference<Frame> lastStreamMetadata = new AtomicReference<>();
@@ -43,9 +42,8 @@ public class DeviceChannel {
     private final Counter framesOut;
     private final Counter framesDropped;
 
-    public DeviceChannel(long deviceId, long productId, int webBufferSize, MeterRegistry meters) {
+    public DeviceChannel(long deviceId, int webBufferSize, MeterRegistry meters) {
         this.deviceId = deviceId;
-        this.productId = productId;
         this.agentToWeb = Sinks.many().multicast().onBackpressureBuffer(webBufferSize, false);
         this.webToAgent = Sinks.many().unicast().onBackpressureBuffer();
         this.framesIn      = Counter.builder("bridge.frames.in").tag("deviceId", String.valueOf(deviceId)).register(meters);
@@ -54,7 +52,6 @@ public class DeviceChannel {
     }
 
     public long deviceId()  { return deviceId; }
-    public long productId() { return productId; }
 
     /** Push a frame received from the agent. */
     public void publishFromAgent(Frame f) {

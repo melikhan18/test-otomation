@@ -17,9 +17,6 @@ public class Session {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "product_id", nullable = false)
-    private Long productId;
-
     @Column(nullable = false, length = 16)
     private String status = "ACTIVE";
 
@@ -30,16 +27,14 @@ public class Session {
     private Instant endedAt;
 
     protected Session() {}
-    public Session(Long deviceId, Long userId, Long productId) {
+    public Session(Long deviceId, Long userId) {
         this.deviceId = deviceId;
         this.userId = userId;
-        this.productId = productId;
     }
 
     public Long getId() { return id; }
     public Long getDeviceId() { return deviceId; }
     public Long getUserId() { return userId; }
-    public Long getProductId() { return productId; }
     public String getStatus() { return status; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getEndedAt() { return endedAt; }

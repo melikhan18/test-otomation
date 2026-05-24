@@ -34,8 +34,9 @@ import java.util.UUID;
  * worker can call it from a synchronous step loop without managing a long-lived socket.
  *
  * Auth: session JWT (issued by android-session-service when a reservation is created) is required
- * in the {@code Authorization: Bearer} header. The session token carries {@code deviceId}
- * and {@code productId} claims, which are then matched against the {@link DeviceChannel}.
+ * in the {@code Authorization: Bearer} header. The session token carries the {@code deviceId}
+ * claim, which session-service authorized against the device's company at reservation time;
+ * the bridge trusts that binding rather than re-checking tenancy on every step.
  */
 @RestController
 @RequestMapping("/api/bridge/sessions/{sessionId}")
@@ -259,15 +260,13 @@ public class ControlRestController {
             throw ApiException.forbidden("token must carry deviceId (session token)");
         }
         // Session id in path must match the JWT — keeps a stolen-session-token from being
-        // re-used for a different session that happens to be running on the same product.
+        // re-used for a different session that happens to be running on the same device.
         if (principal.sessionId() != null && !principal.sessionId().equals(sessionId)) {
             throw ApiException.forbidden("session id mismatch");
         }
         DeviceChannel channel = registry.get(principal.deviceId())
                 .orElseThrow(() -> ApiException.notFound("agent offline"));
-        if (channel.productId() != principal.productId()) {
-            throw ApiException.forbidden("product mismatch");
-        }
+        // Tenancy already established by session-service at reservation time (see class javadoc).
         return channel;
     }
 

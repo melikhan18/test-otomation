@@ -29,9 +29,6 @@ public class StepEntity {
     @Column(name = "retry_count", nullable = false)        private int retryCount = 0;
     @Column(name = "screenshot_after", nullable = false)   private boolean screenshotAfter = false;
 
-    @Column(name = "flow_meta", columnDefinition = "TEXT", nullable = false)
-    private String flowMeta = "{}";
-
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt = Instant.now();
 
     protected StepEntity() {}
@@ -53,6 +50,5 @@ public class StepEntity {
     public int getTimeoutMs() { return timeoutMs; }          public void setTimeoutMs(int v) { this.timeoutMs = v; }
     public int getRetryCount() { return retryCount; }        public void setRetryCount(int v) { this.retryCount = v; }
     public boolean isScreenshotAfter() { return screenshotAfter; } public void setScreenshotAfter(boolean v) { this.screenshotAfter = v; }
-    public String getFlowMeta() { return flowMeta; }         public void setFlowMeta(String v) { this.flowMeta = v == null ? "{}" : v; }
     public Instant getCreatedAt() { return createdAt; }
 }

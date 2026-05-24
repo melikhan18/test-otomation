@@ -4,7 +4,6 @@ export type SessionView = {
   id: number;
   deviceId: number;
   userId: number;
-  productId: number;
   status: "ACTIVE" | "ENDED";
   createdAt: string;
   endedAt: string | null;

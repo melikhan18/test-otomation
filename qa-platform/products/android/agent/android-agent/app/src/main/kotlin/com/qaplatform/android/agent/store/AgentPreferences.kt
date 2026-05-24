@@ -19,21 +19,18 @@ class AgentPreferences(private val context: Context) {
         val WS_URL       = stringPreferencesKey("ws_url")
         val AGENT_TOKEN  = stringPreferencesKey("agent_token")
         val DEVICE_ID    = longPreferencesKey("device_id")
-        val PRODUCT_ID   = longPreferencesKey("product_id")
     }
 
     val state: Flow<AgentState> = context.dataStore.data.map(::toState)
 
     suspend fun current(): AgentState = toState(context.dataStore.data.first())
 
-    suspend fun saveEnrollment(backendUrl: String, wsUrl: String, agentToken: String,
-                               deviceId: Long, productId: Long) {
+    suspend fun saveEnrollment(backendUrl: String, wsUrl: String, agentToken: String, deviceId: Long) {
         context.dataStore.edit { p ->
             p[Keys.BACKEND_URL] = backendUrl
             p[Keys.WS_URL]      = wsUrl
             p[Keys.AGENT_TOKEN] = agentToken
             p[Keys.DEVICE_ID]   = deviceId
-            p[Keys.PRODUCT_ID]  = productId
         }
     }
 
@@ -50,7 +47,6 @@ class AgentPreferences(private val context: Context) {
         wsUrl      = p[Keys.WS_URL] ?: "",
         agentToken = p[Keys.AGENT_TOKEN],
         deviceId   = p[Keys.DEVICE_ID],
-        productId  = p[Keys.PRODUCT_ID],
     )
 }
 
@@ -59,7 +55,6 @@ data class AgentState(
     val wsUrl: String,
     val agentToken: String?,
     val deviceId: Long?,
-    val productId: Long?,
 ) {
     val enrolled: Boolean get() = !agentToken.isNullOrBlank() && deviceId != null
 }

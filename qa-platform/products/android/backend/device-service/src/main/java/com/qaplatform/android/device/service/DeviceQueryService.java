@@ -93,7 +93,7 @@ public class DeviceQueryService {
         else status = DeviceDtos.DeviceStatus.OFFLINE;
 
         return new DeviceDtos.AdminDeviceView(
-                d.getId(), d.getProductId(), d.getCompanyId(), d.getSerial(),
+                d.getId(), d.getCompanyId(), d.getSerial(),
                 d.getManufacturer(), d.getModel(),
                 d.getAndroidVersion(), d.getScreenWidth(), d.getScreenHeight(), d.getAgentVersion(),
                 d.getEnrolledAt(), d.getLastSeenAt(), status, sessionId,
@@ -108,7 +108,7 @@ public class DeviceQueryService {
         else status = DeviceDtos.DeviceStatus.OFFLINE;
 
         return new DeviceDtos.DeviceView(
-                d.getId(), d.getProductId(), d.getSerial(), d.getManufacturer(), d.getModel(),
+                d.getId(), d.getSerial(), d.getManufacturer(), d.getModel(),
                 d.getAndroidVersion(), d.getScreenWidth(), d.getScreenHeight(), d.getAgentVersion(),
                 d.getEnrolledAt(), d.getLastSeenAt(), status, sessionId);
     }

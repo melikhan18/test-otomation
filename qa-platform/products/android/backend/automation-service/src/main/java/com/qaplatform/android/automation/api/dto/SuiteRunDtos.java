@@ -30,7 +30,6 @@ public class SuiteRunDtos {
     /** Lightweight row for the suite-runs list. */
     public record Summary(
             long id,
-            long productId,
             long suiteId,
             String suiteName,
             Long deviceId,
@@ -48,7 +47,6 @@ public class SuiteRunDtos {
 
     public record View(
             long id,
-            long productId,
             long suiteId,
             String suiteName,
             Long deviceId,

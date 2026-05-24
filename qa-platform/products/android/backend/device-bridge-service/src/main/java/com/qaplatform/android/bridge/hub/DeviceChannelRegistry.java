@@ -22,10 +22,10 @@ public class DeviceChannelRegistry {
     }
 
     /** Register a fresh channel, replacing any existing one (a reconnecting agent). */
-    public DeviceChannel attach(long deviceId, long productId) {
+    public DeviceChannel attach(long deviceId) {
         DeviceChannel previous = channels.remove(deviceId);
         if (previous != null) previous.close();
-        DeviceChannel fresh = new DeviceChannel(deviceId, productId, webBufferSize, meters);
+        DeviceChannel fresh = new DeviceChannel(deviceId, webBufferSize, meters);
         channels.put(deviceId, fresh);
         return fresh;
     }

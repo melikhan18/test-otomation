@@ -13,7 +13,6 @@ public class ScenarioEntity {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "product_id", nullable = false) private Long productId;
     @Column(name = "project_id", nullable = false) private Long projectId;
     @Column(nullable = false, length = 255)         private String name;
     @Column(columnDefinition = "TEXT")              private String description;
@@ -31,8 +30,7 @@ public class ScenarioEntity {
 
     protected ScenarioEntity() {}
 
-    public ScenarioEntity(Long productId, Long projectId, String name, Long createdByUserId) {
-        this.productId = productId;
+    public ScenarioEntity(Long projectId, String name, Long createdByUserId) {
         this.projectId = projectId;
         this.name = name;
         this.createdByUserId = createdByUserId;
@@ -41,7 +39,6 @@ public class ScenarioEntity {
     @PreUpdate void touch() { this.updatedAt = Instant.now(); this.version += 1; }
 
     public Long getId() { return id; }
-    public Long getProductId() { return productId; }
     public Long getProjectId() { return projectId; }
     public String getName() { return name; }                public void setName(String v) { this.name = v; }
     public String getDescription() { return description; }   public void setDescription(String v) { this.description = v; }

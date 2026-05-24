@@ -33,7 +33,6 @@ public class RunDtos {
     /** Lightweight row for the runs list. */
     public record Summary(
             long id,
-            long productId,
             Long scenarioId,
             String scenarioName,
             Long deviceId,
@@ -57,7 +56,6 @@ public class RunDtos {
 
     public record View(
             long id,
-            long productId,
             Long scenarioId,
             String scenarioName,
             Integer scenarioVersion,

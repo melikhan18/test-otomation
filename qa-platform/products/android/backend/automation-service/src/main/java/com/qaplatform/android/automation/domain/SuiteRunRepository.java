@@ -7,7 +7,6 @@ import java.time.Instant;
 import java.util.List;
 
 public interface SuiteRunRepository extends JpaRepository<SuiteRunEntity, Long> {
-    List<SuiteRunEntity> findTop100ByProductIdOrderByCreatedAtDesc(Long productId);
     List<SuiteRunEntity> findTop100ByProjectIdOrderByCreatedAtDesc(Long projectId);
     List<SuiteRunEntity> findTop50ByProjectIdAndSuiteIdOrderByCreatedAtDesc(Long projectId, Long suiteId);
 

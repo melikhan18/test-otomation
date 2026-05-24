@@ -29,7 +29,6 @@ public class TestDataDtos {
     /** Sensitive values are masked unless explicitly revealed. */
     public record View(
             long id,
-            long productId,
             String name,
             String environment,
             String value,        // "••••••••" when sensitive && !revealed
