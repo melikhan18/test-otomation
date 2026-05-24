@@ -1,5 +1,5 @@
 import { Navigate, Outlet, createBrowserRouter, useParams, useSearchParams } from "react-router-dom";
-import { useAuthStore, useEffectiveRole } from "@/store/auth";
+import { useAuthStore, useEffectiveRole, type Platform } from "@/store/auth";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
 import AccountPage from "@/pages/AccountPage";
@@ -19,6 +19,9 @@ import RunDetailPage from "@/pages/automation/RunDetailPage";
 import SuiteRunDetailPage from "@/pages/automation/SuiteRunDetailPage";
 import ReportsPage from "@/pages/automation/ReportsPage";
 import WebAutomationPage from "@/pages/automation/WebAutomationPage";
+import WebElementsPage from "@/pages/automation/WebElementsPage";
+import WebDataPage from "@/pages/automation/WebDataPage";
+import WebSuitesPage from "@/pages/automation/WebSuitesPage";
 import MembersPage from "@/pages/MembersPage";
 import AppLayout from "@/components/AppLayout";
 
@@ -50,6 +53,24 @@ function RequireRole({ minRole }: { minRole: "OWNER" | "MANAGER" }) {
     minRole === "OWNER"   ? role === "OWNER"
                           : role === "OWNER" || role === "QA_MANAGER";
   if (!allowed) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
+/**
+ * Route-level platform gate. Stops the user from sitting on a /automation/web
+ * URL after switching to ANDROID (the page would render but POSTs would carry
+ * WEB-shaped bodies to the Android backend and fail with "deviceId: required").
+ * The redirect target is the matching home for whichever platform is active.
+ */
+function RequirePlatform({ platform }: { platform: Platform }) {
+  const active = useAuthStore((s) => s.activePlatform);
+  if (active !== platform) {
+    const home =
+      active === "WEB"     ? "/automation/web"
+    : active === "ANDROID" ? "/devices"
+    :                        "/";
+    return <Navigate to={home} replace />;
+  }
   return <Outlet />;
 }
 
@@ -133,7 +154,17 @@ export const router = createBrowserRouter([
           { path: "/automation/suites/:suiteId",          element: <RedirectSuite /> },
 
           // ── Web platform (server-side Playwright) ──────────────────────────
-          { path: "/automation/web", element: <WebAutomationPage /> },
+          // Whole subtree gated on activePlatform === "WEB" so users can't end
+          // up on a stale WEB page after switching to Android.
+          {
+            element: <RequirePlatform platform="WEB" />,
+            children: [
+              { path: "/automation/web",          element: <WebAutomationPage /> },
+              { path: "/automation/web/elements", element: <WebElementsPage /> },
+              { path: "/automation/web/data",     element: <WebDataPage /> },
+              { path: "/automation/web/suites",   element: <WebSuitesPage /> },
+            ],
+          },
         ],
       },
     ],

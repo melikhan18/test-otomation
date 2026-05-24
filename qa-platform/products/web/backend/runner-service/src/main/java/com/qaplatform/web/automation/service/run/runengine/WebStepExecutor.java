@@ -10,8 +10,12 @@ import com.qaplatform.common.runengine.spi.StepContext;
 import com.qaplatform.common.runengine.spi.StepExecutor;
 import com.qaplatform.common.runengine.spi.StepOutcome;
 import com.qaplatform.web.automation.domain.WebStepAction;
+import com.qaplatform.web.automation.domain.WebElementEntity;
+import com.qaplatform.web.automation.domain.WebElementRepository;
 import com.qaplatform.web.automation.domain.WebStepEntity;
 import com.qaplatform.web.automation.domain.WebStepRepository;
+import com.qaplatform.web.automation.domain.WebTestDataEntity;
+import com.qaplatform.web.automation.domain.WebTestDataRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -47,9 +51,15 @@ public class WebStepExecutor {
     private static final Logger log = LoggerFactory.getLogger(WebStepExecutor.class);
 
     private final WebStepRepository steps;
+    private final WebElementRepository elements;
+    private final WebTestDataRepository testData;
 
-    public WebStepExecutor(WebStepRepository steps) {
+    public WebStepExecutor(WebStepRepository steps,
+                           WebElementRepository elements,
+                           WebTestDataRepository testData) {
         this.steps = steps;
+        this.elements = elements;
+        this.testData = testData;
     }
 
     /**
@@ -65,8 +75,14 @@ public class WebStepExecutor {
                 return StepOutcome.error("step " + runStep.id() + " not found");
             }
             int timeout = entity.getTimeoutMs() > 0 ? entity.getTimeoutMs() : defaultTimeoutMs;
+            // Catalog resolution happens once per step — fixed inputs into the
+            // dispatch table. If catalog refs are unset, falls back to the
+            // step's literal selector / value (back-compat with v1 rows).
+            ResolvedStep resolved;
+            try { resolved = resolve(entity, ctx.environment()); }
+            catch (RuntimeException re) { return StepOutcome.failed(re.getMessage()); }
             try {
-                return dispatch(page, entity, timeout);
+                return dispatch(page, entity, resolved, timeout);
             } catch (com.microsoft.playwright.PlaywrightException pe) {
                 // Playwright distinguishes assertion failures (TimeoutError-shaped)
                 // from other errors only via message inspection. We treat
@@ -80,112 +96,150 @@ public class WebStepExecutor {
         };
     }
 
+    /**
+     * The pair of resolved values the dispatcher uses for one step. {@code selector}
+     * is the locator string Playwright sees; {@code value} is the literal /
+     * substituted argument (URL, text-to-type, expected match, …).
+     */
+    private record ResolvedStep(String selector, String value) {}
+
+    private ResolvedStep resolve(WebStepEntity step, String environment) {
+        // Selector: prefer catalog ref over literal. If the element row is gone
+        // (FK got nulled), fall back to literal — surface "step requires selector"
+        // downstream if both are absent.
+        String selector = step.getSelector();
+        if (step.getTargetElementId() != null) {
+            WebElementEntity el = elements.findById(step.getTargetElementId()).orElse(null);
+            if (el != null) selector = el.getPrimaryValue();
+        }
+
+        // Value: prefer catalog ref + env override. test_data has (project,
+        // name, environment) — first try (env-specific), fall back to the
+        // row pointed at by data_id (which is one env's row, may not be the
+        // run's env — that's fine).
+        String value = step.getValue();
+        if (step.getDataId() != null) {
+            WebTestDataEntity td = testData.findById(step.getDataId()).orElse(null);
+            if (td != null) {
+                value = td.getValue();
+                if (environment != null && !environment.equals(td.getEnvironment())) {
+                    testData.findByProjectIdAndNameAndEnvironment(td.getProjectId(), td.getName(), environment)
+                            .ifPresent(envSpecific -> { /* shadow local */ });
+                    var byEnv = testData.findByProjectIdAndNameAndEnvironment(
+                            td.getProjectId(), td.getName(), environment);
+                    if (byEnv.isPresent()) value = byEnv.get().getValue();
+                }
+            }
+        }
+        return new ResolvedStep(selector, value);
+    }
+
     /* ──────────────────────────── dispatch ─────────────────────────────── */
 
-    private StepOutcome dispatch(Page page, WebStepEntity step, int timeoutMs) {
+    private StepOutcome dispatch(Page page, WebStepEntity step, ResolvedStep r, int timeoutMs) {
         return switch (step.getAction()) {
             // ── Navigation ───────────────────────────────────────────────
-            case GOTO         -> { page.navigate(req("value", step.getValue())); yield StepOutcome.passed(step.getValue()); }
+            case GOTO         -> { page.navigate(req("value", r.value())); yield StepOutcome.passed(r.value()); }
             case RELOAD       -> { page.reload(); yield StepOutcome.passed(null); }
             case GO_BACK      -> { page.goBack(); yield StepOutcome.passed(null); }
             case GO_FORWARD   -> { page.goForward(); yield StepOutcome.passed(null); }
 
             // ── Interaction ──────────────────────────────────────────────
             case CLICK -> {
-                locator(page, step).click(new Locator.ClickOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                locator(page, step, r).click(new Locator.ClickOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case DBL_CLICK -> {
-                locator(page, step).dblclick(new Locator.DblclickOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                locator(page, step, r).dblclick(new Locator.DblclickOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case FILL -> {
-                locator(page, step).fill(req("value", step.getValue()),
+                locator(page, step, r).fill(req("value", r.value()),
                         new Locator.FillOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                yield StepOutcome.passed(r.selector());
             }
             case PRESS_KEY -> {
                 // selector optional — if provided, key goes to that element;
                 // otherwise to the active document focus via page.keyboard.
-                String key = req("value", step.getValue());
-                if (step.getSelector() != null && !step.getSelector().isBlank()) {
-                    locator(page, step).press(key, new Locator.PressOptions().setTimeout(timeoutMs));
+                String key = req("value", r.value());
+                if (r.selector() != null && !r.selector().isBlank()) {
+                    locator(page, step, r).press(key, new Locator.PressOptions().setTimeout(timeoutMs));
                 } else {
                     page.keyboard().press(key);
                 }
-                yield StepOutcome.passed(step.getSelector() != null ? step.getSelector() : "<page>");
+                yield StepOutcome.passed(r.selector() != null ? r.selector() : "<page>");
             }
             case CHECK -> {
-                locator(page, step).check(new Locator.CheckOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                locator(page, step, r).check(new Locator.CheckOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case UNCHECK -> {
-                locator(page, step).uncheck(new Locator.UncheckOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                locator(page, step, r).uncheck(new Locator.UncheckOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case SELECT -> {
-                locator(page, step).selectOption(req("value", step.getValue()),
+                locator(page, step, r).selectOption(req("value", r.value()),
                         new Locator.SelectOptionOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                yield StepOutcome.passed(r.selector());
             }
             case HOVER -> {
-                locator(page, step).hover(new Locator.HoverOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                locator(page, step, r).hover(new Locator.HoverOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
 
             // ── Wait ─────────────────────────────────────────────────────
             case WAIT_FOR_SELECTOR -> {
-                locator(page, step).waitFor(new Locator.WaitForOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                locator(page, step, r).waitFor(new Locator.WaitForOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case WAIT_FOR_LOAD_STATE -> {
-                page.waitForLoadState(parseLoadState(step.getValue()));
-                yield StepOutcome.passed(step.getValue());
+                page.waitForLoadState(parseLoadState(r.value()));
+                yield StepOutcome.passed(r.value());
             }
             case SLEEP -> {
-                long ms = parseLongOr(step.getValue(), 1000L);
+                long ms = parseLongOr(r.value(), 1000L);
                 page.waitForTimeout(ms);
                 yield StepOutcome.passed("sleep " + ms + "ms");
             }
 
             // ── Assert ───────────────────────────────────────────────────
             case ASSERT_VISIBLE -> {
-                assertThat(locator(page, step)).isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                assertThat(locator(page, step, r)).isVisible(new LocatorAssertions.IsVisibleOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case ASSERT_HIDDEN -> {
-                assertThat(locator(page, step)).isHidden(new LocatorAssertions.IsHiddenOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                assertThat(locator(page, step, r)).isHidden(new LocatorAssertions.IsHiddenOptions().setTimeout(timeoutMs));
+                yield StepOutcome.passed(r.selector());
             }
             case ASSERT_TEXT_EQUALS -> {
-                assertThat(locator(page, step)).hasText(req("value", step.getValue()),
+                assertThat(locator(page, step, r)).hasText(req("value", r.value()),
                         new LocatorAssertions.HasTextOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                yield StepOutcome.passed(r.selector());
             }
             case ASSERT_TEXT_CONTAINS -> {
-                assertThat(locator(page, step)).containsText(req("value", step.getValue()),
+                assertThat(locator(page, step, r)).containsText(req("value", r.value()),
                         new LocatorAssertions.ContainsTextOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                yield StepOutcome.passed(r.selector());
             }
             case ASSERT_URL_EQUALS -> {
-                assertThat(page).hasURL(req("value", step.getValue()),
+                assertThat(page).hasURL(req("value", r.value()),
                         new PageAssertions.HasURLOptions().setTimeout(timeoutMs));
                 yield StepOutcome.passed(null);
             }
             case ASSERT_URL_CONTAINS -> {
-                String urlPart = req("value", step.getValue());
+                String urlPart = req("value", r.value());
                 if (!page.url().contains(urlPart)) {
                     yield StepOutcome.failed("url '" + page.url() + "' does not contain '" + urlPart + "'");
                 }
                 yield StepOutcome.passed(null);
             }
             case ASSERT_TITLE_EQUALS -> {
-                assertThat(page).hasTitle(req("value", step.getValue()),
+                assertThat(page).hasTitle(req("value", r.value()),
                         new PageAssertions.HasTitleOptions().setTimeout(timeoutMs));
                 yield StepOutcome.passed(null);
             }
             case ASSERT_TITLE_CONTAINS -> {
-                String titlePart = req("value", step.getValue());
+                String titlePart = req("value", r.value());
                 String title = page.title();
                 if (!title.contains(titlePart)) {
                     yield StepOutcome.failed("title '" + title + "' does not contain '" + titlePart + "'");
@@ -194,14 +248,14 @@ public class WebStepExecutor {
             }
             case ASSERT_ATTRIBUTE -> {
                 // value format: attrName=expectedValue
-                String spec = req("value", step.getValue());
+                String spec = req("value", r.value());
                 int eq = spec.indexOf('=');
                 if (eq <= 0) yield StepOutcome.failed("ASSERT_ATTRIBUTE value must be name=value");
                 String attr = spec.substring(0, eq);
                 String want = spec.substring(eq + 1);
-                assertThat(locator(page, step)).hasAttribute(attr, want,
+                assertThat(locator(page, step, r)).hasAttribute(attr, want,
                         new LocatorAssertions.HasAttributeOptions().setTimeout(timeoutMs));
-                yield StepOutcome.passed(step.getSelector());
+                yield StepOutcome.passed(r.selector());
             }
 
             // ── Util ─────────────────────────────────────────────────────
@@ -213,11 +267,11 @@ public class WebStepExecutor {
                 yield StepOutcome.passed(null);
             }
             case COMMENT -> {
-                log.info("step {} comment: {}", step.getId(), step.getValue() == null ? "" : step.getValue());
+                log.info("step {} comment: {}", step.getId(), r.value() == null ? "" : r.value());
                 yield StepOutcome.passed(null);
             }
             case EVAL_JS -> {
-                page.evaluate(req("value", step.getValue()));
+                page.evaluate(req("value", r.value()));
                 yield StepOutcome.passed(null);
             }
         };
@@ -225,11 +279,11 @@ public class WebStepExecutor {
 
     /* ───────────────────────── helpers ─────────────────────────────────── */
 
-    private static Locator locator(Page page, WebStepEntity step) {
-        String sel = step.getSelector();
+    private static Locator locator(Page page, WebStepEntity step, ResolvedStep r) {
+        String sel = r.selector();
         if (sel == null || sel.isBlank()) {
             throw new IllegalArgumentException("step " + step.getId() + " (" + step.getAction() +
-                    ") requires a selector");
+                    ") requires a selector (literal or element catalog ref)");
         }
         return page.locator(sel);
     }

@@ -1,0 +1,52 @@
+package com.qaplatform.web.automation.domain;
+
+import jakarta.persistence.*;
+
+import java.time.Instant;
+
+/**
+ * Per-(project, environment, name) lookup value. Identical shape to
+ * Android's {@code TestDataEntity}. Sensitive values get masked on the
+ * read API; the executor still sees the cleartext.
+ */
+@Entity
+@Table(name = "test_data", schema = "web_automation")
+public class WebTestDataEntity {
+
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "project_id", nullable = false) private Long projectId;
+    @Column(nullable = false, length = 160)        private String name;
+    @Column(nullable = false, length = 32)         private String environment = "default";
+    @Column(nullable = false, columnDefinition = "TEXT") private String value;
+    @Column(columnDefinition = "TEXT")             private String description;
+    @Column(nullable = false)                      private boolean sensitive = false;
+
+    @Column(name = "created_by_user_id", nullable = false) private Long createdByUserId;
+    @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt = Instant.now();
+    @Column(name = "updated_at", nullable = false)                    private Instant updatedAt = Instant.now();
+
+    protected WebTestDataEntity() {}
+
+    public WebTestDataEntity(Long projectId, String name, String environment, String value, Long createdByUserId) {
+        this.projectId = projectId;
+        this.name = name;
+        this.environment = environment;
+        this.value = value;
+        this.createdByUserId = createdByUserId;
+    }
+
+    @PreUpdate void touch() { this.updatedAt = Instant.now(); }
+
+    public Long getId() { return id; }
+    public Long getProjectId() { return projectId; }
+    public String getName() { return name; }                public void setName(String v) { this.name = v; }
+    public String getEnvironment() { return environment; }  public void setEnvironment(String v) { this.environment = v; }
+    public String getValue() { return value; }              public void setValue(String v) { this.value = v; }
+    public String getDescription() { return description; }   public void setDescription(String v) { this.description = v; }
+    public boolean isSensitive() { return sensitive; }       public void setSensitive(boolean v) { this.sensitive = v; }
+    public Long getCreatedByUserId() { return createdByUserId; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+}

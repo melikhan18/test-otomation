@@ -87,6 +87,8 @@ public class WebScenarioService {
         WebStepEntity step = new WebStepEntity(s.getId(), order, req.action());
         step.setSelector(req.selector());
         step.setValue(req.value());
+        step.setTargetElementId(req.targetElementId());
+        step.setDataId(req.dataId());
         if (req.timeoutMs() != null) step.setTimeoutMs(req.timeoutMs());
         if (req.screenshotAfter() != null) step.setScreenshotAfter(req.screenshotAfter());
         WebStepEntity saved = steps.save(step);
@@ -102,6 +104,8 @@ public class WebScenarioService {
         step.setAction(req.action());
         step.setSelector(req.selector());
         step.setValue(req.value());
+        step.setTargetElementId(req.targetElementId());
+        step.setDataId(req.dataId());
         if (req.timeoutMs() != null) step.setTimeoutMs(req.timeoutMs());
         if (req.screenshotAfter() != null) step.setScreenshotAfter(req.screenshotAfter());
         steps.save(step);
@@ -179,6 +183,7 @@ public class WebScenarioService {
         return new WebScenarioDtos.StepView(
                 st.getId(), st.getScenarioId(), st.getOrderIndex(), st.getAction(),
                 st.getSelector(), st.getValue(),
+                st.getTargetElementId(), st.getDataId(),
                 st.getTimeoutMs(), st.isScreenshotAfter(),
                 st.getCreatedAt()
         );
