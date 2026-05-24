@@ -1,8 +1,18 @@
 package com.qaplatform.android.automation.service.run;
 
 import com.qaplatform.android.automation.domain.*;
+import com.qaplatform.android.automation.service.run.runengine.AndroidStepExecutor;
+import com.qaplatform.android.automation.service.run.runengine.ObjectStorageArtifactSink;
+import com.qaplatform.android.automation.service.run.runengine.Slf4jRunLogStream;
+import com.qaplatform.android.automation.service.run.runengine.StepEntityRunStep;
 import com.qaplatform.android.automation.service.storage.ObjectStorage;
 import com.qaplatform.common.error.ApiException;
+import com.qaplatform.common.runengine.spi.ArtifactSink;
+import com.qaplatform.common.runengine.spi.CancellationToken;
+import com.qaplatform.common.runengine.spi.RunLogStream;
+import com.qaplatform.common.runengine.spi.StepContext;
+import com.qaplatform.common.runengine.spi.StepExecutor;
+import com.qaplatform.common.runengine.spi.StepOutcome;
 import com.qaplatform.common.runengine.status.RunStatus;
 import com.qaplatform.common.runengine.status.StepResultStatus;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -64,6 +75,7 @@ public class RunOrchestrator {
     private final RunCancellationRegistry cancels;
     private final com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup;
     private final ReportsPublisher reportsPublisher;
+    private final AndroidStepExecutor stepExecutorFactory;
 
     public RunOrchestrator(RunRepository runs, StepResultRepository stepResults,
                            ScenarioRepository scenarios, StepRepository steps,
@@ -73,7 +85,8 @@ public class RunOrchestrator {
                            ObjectStorage storage,
                            RunCancellationRegistry cancels,
                            com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup,
-                           ReportsPublisher reportsPublisher) {
+                           ReportsPublisher reportsPublisher,
+                           AndroidStepExecutor stepExecutorFactory) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
@@ -88,6 +101,7 @@ public class RunOrchestrator {
         this.storage = storage;
         this.cancels = cancels;
         this.reportsPublisher = reportsPublisher;
+        this.stepExecutorFactory = stepExecutorFactory;
     }
 
     public void submit(long runId, String userJwt) {
@@ -130,6 +144,24 @@ public class RunOrchestrator {
         StepRunner runner = new StepRunner(bridge, elements, testData,
                 reservation.sessionId(), reservation.sessionToken(),
                 run.getEnvironment());
+
+        // F6 SPI binding: wrap the per-run StepRunner in a StepExecutor and
+        // build the cross-platform StepContext we'll pass through it. This is
+        // the integration point that makes the Android stack a concrete
+        // implementation of the platform-agnostic run engine — the orchestrator
+        // dispatches through StepExecutor.execute(...) from here on; the iOS /
+        // Backend / Web stacks will provide their own AndroidStepExecutor
+        // equivalent against the same interface.
+        StepExecutor executor = stepExecutorFactory.forRun(runner);
+        Long companyId = projectLookup.find(run.getProjectId())
+                .map(i -> i.companyId()).orElse(null);
+        CancellationToken cancelToken = () -> cancels.isCancelled(runId);
+        ArtifactSink artifactSink = new ObjectStorageArtifactSink(storage);
+        RunLogStream runLog = new Slf4jRunLogStream(runId);
+        StepContext stepContext = new StepContext(
+                runId, companyId == null ? 0L : companyId, run.getProjectId(),
+                "ANDROID", run.getEnvironment(),
+                new HashMap<>(), cancelToken, runLog, artifactSink);
 
         boolean anyFailure = false;
         boolean cancelled = false;
@@ -195,24 +227,30 @@ public class RunOrchestrator {
                 row.setStartedAt(Instant.now());
                 stepResults.save(row);
 
-                StepRunner.StepResult result = runner.run(step);
+                // F6 dispatch — through the StepExecutor SPI, not the runner directly.
+                // The outcome is the platform-agnostic StepOutcome record; durationMs
+                // is measured here since StepOutcome doesn't carry it (the orchestrator
+                // already knows the wall clock).
+                long stepStartedAtMs = System.currentTimeMillis();
+                StepOutcome outcome = executor.execute(StepEntityRunStep.of(step), stepContext);
+                int durationMs = (int) (System.currentTimeMillis() - stepStartedAtMs);
 
-                row.setStatus(result.status());
+                row.setStatus(outcome.status());
                 row.setFinishedAt(Instant.now());
-                row.setDurationMs(result.durationMs());
-                row.setErrorMessage(result.errorMessage());
-                row.setResolvedLocator(result.resolvedLocator());
+                row.setDurationMs(durationMs);
+                row.setErrorMessage(outcome.errorMessage());
+                row.setResolvedLocator(outcome.resolvedLocator());
 
                 // Capture a still-frame the moment a step fails — gives the report a "what
                 // did the screen look like" anchor without paying the screenshot cost on
                 // every PASSED step. Best-effort: any error here is logged and ignored.
-                if (result.status() == StepResultStatus.FAILED || result.status() == StepResultStatus.ERROR) {
+                if (outcome.status() == StepResultStatus.FAILED || outcome.status() == StepResultStatus.ERROR) {
                     String url = captureScreenshot(reservation.sessionId(), reservation.sessionToken(), runId, row.getId());
                     if (url != null) row.setScreenshotUrl(url);
                 }
                 stepResults.save(row);
 
-                if (result.status() != StepResultStatus.PASSED) {
+                if (outcome.status() != StepResultStatus.PASSED) {
                     anyFailure = true;
                     // Mark remaining steps as SKIPPED so the report is accurate.
                     for (int j = i + 1; j < placeholders.size(); j++) {
