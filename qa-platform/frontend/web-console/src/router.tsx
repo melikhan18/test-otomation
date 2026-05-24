@@ -18,6 +18,7 @@ import WorkspacePage from "@/pages/automation/WorkspacePage";
 import RunDetailPage from "@/pages/automation/RunDetailPage";
 import SuiteRunDetailPage from "@/pages/automation/SuiteRunDetailPage";
 import ReportsPage from "@/pages/automation/ReportsPage";
+import WebAutomationPage from "@/pages/automation/WebAutomationPage";
 import MembersPage from "@/pages/MembersPage";
 import AppLayout from "@/components/AppLayout";
 
@@ -130,6 +131,9 @@ export const router = createBrowserRouter([
           { path: "/automation/scenarios/:scenarioId",    element: <RedirectScenario /> },
           { path: "/automation/suites",                   element: <Navigate to="/automation/workspace" replace /> },
           { path: "/automation/suites/:suiteId",          element: <RedirectSuite /> },
+
+          // ── Web platform (server-side Playwright) ──────────────────────────
+          { path: "/automation/web", element: <WebAutomationPage /> },
         ],
       },
     ],
