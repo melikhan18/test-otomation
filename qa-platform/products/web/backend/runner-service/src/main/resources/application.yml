@@ -1,0 +1,68 @@
+server:
+  port: 8088
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: web-runner-service
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:qa_platform}
+    username: ${DB_USER:dp}
+    password: ${DB_PASSWORD:dp_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: web_automation
+        jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    default-schema: web_automation
+    schemas: web_automation
+    locations: classpath:db/migration
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:Y2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtY2hhbmdlLW1lLWluLXByb2QtMTIzNDU2Nzg=}
+    issuer: qa-platform
+  services:
+    reports:
+      url: ${SVC_REPORTS:http://localhost:8090}
+  storage:
+    endpoint:    ${MINIO_ENDPOINT:http://localhost:9000}
+    public-url:  ${MINIO_PUBLIC_URL:http://localhost:9000}
+    access-key:  ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key:  ${MINIO_SECRET_KEY:minioadmin123}
+    region:      us-east-1
+    screenshots-bucket: screenshots
+    videos-bucket:      videos
+    # Playwright trace.zip output — same bucket as videos (anonymous-download
+    # policy already set in minio-init).
+    traces-bucket:      videos
+  # Per-run scratch space for Playwright artifacts before they're uploaded
+  # to MinIO and deleted from disk. Lives on the container filesystem; size
+  # bounded by the run video duration (~10-30 MB typical).
+  runs-tmp-dir: ${RUNS_TMP_DIR:/tmp/qa-platform-web-runs}
+  browser:
+    # Playwright default is headed; we force headless because there's no
+    # display in the container. (xvfb is also an option but headless is
+    # supported and faster.)
+    headless: ${BROWSER_HEADLESS:true}
+    # Hard ceiling on a single step's execution before the run aborts.
+    # Belt-and-braces — per-step timeouts in the DSL still apply.
+    step-timeout-ms: ${BROWSER_STEP_TIMEOUT_MS:30000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    com.qaplatform: DEBUG
+    com.microsoft.playwright: INFO

@@ -32,7 +32,11 @@ project(":android-device-service").projectDir     = file("products/android/backe
 project(":android-session-service").projectDir    = file("products/android/backend/session-service")
 project(":android-bridge-service").projectDir     = file("products/android/backend/device-bridge-service")
 
-// ─── (gelecek platformlar buraya eklenir — iOS, backend, web) ────────────────
+// ─── Web platform stack ──────────────────────────────────────────────────────
+include(":web-runner-service")
+project(":web-runner-service").projectDir         = file("products/web/backend/runner-service")
+
+// ─── (gelecek platformlar buraya eklenir — iOS, backend) ─────────────────────
 
 pluginManagement {
     repositories {

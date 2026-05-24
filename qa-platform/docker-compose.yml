@@ -193,14 +193,15 @@ services:
         SERVICE_PATH: shared/api-gateway
     environment:
       <<: *service-env
-      SVC_AUTH:       http://auth-service:8081
-      SVC_TENANT:     http://tenant-service:8089
-      SVC_REPORTS:    http://reports-aggregator-service:8090
-      SVC_DEVICE:     http://android-device-service:8082
-      SVC_SESSION:    http://android-session-service:8083
-      SVC_BRIDGE:     http://android-bridge-service:8084
-      SVC_BRIDGE_WS:  ws://android-bridge-service:8084
-      SVC_AUTOMATION: http://android-automation-service:8085
+      SVC_AUTH:        http://auth-service:8081
+      SVC_TENANT:      http://tenant-service:8089
+      SVC_REPORTS:     http://reports-aggregator-service:8090
+      SVC_DEVICE:      http://android-device-service:8082
+      SVC_SESSION:     http://android-session-service:8083
+      SVC_BRIDGE:      http://android-bridge-service:8084
+      SVC_BRIDGE_WS:   ws://android-bridge-service:8084
+      SVC_AUTOMATION:  http://android-automation-service:8085
+      SVC_WEB_RUNNER:  http://web-runner-service:8088
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:*,http://127.0.0.1:*}
     depends_on:
       - auth-service
@@ -210,6 +211,7 @@ services:
       - android-session-service
       - android-bridge-service
       - android-automation-service
+      - web-runner-service
     ports:
       - "${GATEWAY_BIND:-0.0.0.0}:8080:8080"
     restart: unless-stopped
@@ -283,6 +285,41 @@ services:
       timeout: 3s
       retries: 20
       start_period: 30s
+
+  # ── Web platform stack (v1) — Playwright server-side runner ─────────────────
+  # Bigger image (~1.8 GB) because the Microsoft Playwright base ships with
+  # Chromium + Firefox + WebKit binaries plus system deps. Bound to 4GB memory
+  # + 2 CPUs by default; raise if you push >4 concurrent runs.
+  # NOTE: uses its own Dockerfile (not the shared root one) because of the
+  # custom base image and Node runtime requirement.
+  web-runner-service:
+    build:
+      context: .
+      dockerfile: products/web/backend/runner-service/Dockerfile
+      args:
+        SERVICE_PATH: products/web/backend/runner-service
+    environment:
+      <<: *service-env
+      SVC_REPORTS: http://reports-aggregator-service:8090
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio:    { condition: service_healthy }
+    ports:
+      - "${WEB_RUNNER_BIND:-0.0.0.0}:8088:8088"
+    # Chromium's renderer crashes silently if /dev/shm < 64MB. Default Docker
+    # value is 64 MB; bump to 1 GB to be safe for parallel runs.
+    shm_size: 1gb
+    mem_limit: 4g
+    cpus: 2.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8088/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      # Playwright first-launch can take 60-90s while Spring + Playwright + Node
+      # bootstrap, so the probe needs a generous start period.
+      start_period: 90s
 
   android-automation-service:
     build:
