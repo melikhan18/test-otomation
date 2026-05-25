@@ -143,7 +143,26 @@ public class StepRunner {
         }
 
         final int maxSwipes = 20;
-        final int settleMs = 350;
+        // Post-swipe settle. 350 ms was too aggressive — the list was still
+        // decelerating when we kicked off the next swipe, and the cascading
+        // momentum made the target visible for one frame then immediately
+        // scroll past. Bumped to 700 ms so the list has a chance to fully
+        // come to rest before we either inspect for the target or fire
+        // another swipe. Slows the worst-case run (20 swipes × ~1.2s ≈ 24s)
+        // but makes hits land on the intended row instead of one above it.
+        final int settleMs = 700;
+        // Swipe gesture itself — kept deliberately slow so the fling
+        // animation deposits less momentum into the scroll view. A 300 ms
+        // swipe at 50% viewport distance generates a strong fling that
+        // overshoots the target; 500 ms feels like a deliberate finger
+        // drag and the list barely keeps moving after release.
+        final long swipeDurationMs = 500L;
+        // Swipe distance as a fraction of viewport (0.0–1.0, but effectively
+        // capped at ~0.8). 0.40 means each swipe scrolls ~40% of the viewport
+        // (start at 70%, end at 30%, centred on midpoint). Smaller bites
+        // than the previous 50% so we don't sail past short single-row
+        // targets between probes.
+        final float swipeFraction = 0.40f;
         // End-of-list detection: if the inspect tree's signature doesn't
         // change for this many consecutive post-swipe probes, the list has
         // stopped scrolling (we've hit the top/bottom edge) so further
@@ -206,17 +225,21 @@ public class StepRunner {
             float w = vp[2] - vp[0], h = vp[3] - vp[1];
             float cx = vp[0] + w / 2f, cy = vp[1] + h / 2f;
             float sx = cx, sy = cy, ex = cx, ey = cy;
+            // Swipe spans (0.5 - swipeFraction/2) → (0.5 + swipeFraction/2)
+            // centred on the viewport midpoint, i.e. swipeFraction of the
+            // axis length. Reversed for the start/end based on direction.
+            float half = swipeFraction / 2f;
             switch (dir) {
-                case "down"  -> { sy = vp[1] + h * 0.75f; ey = vp[1] + h * 0.25f; }
-                case "up"    -> { sy = vp[1] + h * 0.25f; ey = vp[1] + h * 0.75f; }
-                case "right" -> { sx = vp[0] + w * 0.75f; ex = vp[0] + w * 0.25f; }
-                case "left"  -> { sx = vp[0] + w * 0.25f; ex = vp[0] + w * 0.75f; }
+                case "down"  -> { sy = vp[1] + h * (0.5f + half); ey = vp[1] + h * (0.5f - half); }
+                case "up"    -> { sy = vp[1] + h * (0.5f - half); ey = vp[1] + h * (0.5f + half); }
+                case "right" -> { sx = vp[0] + w * (0.5f + half); ex = vp[0] + w * (0.5f - half); }
+                case "left"  -> { sx = vp[0] + w * (0.5f - half); ex = vp[0] + w * (0.5f + half); }
             }
             Map<String, Object> cmd = new LinkedHashMap<>();
             cmd.put("type", "swipe");
             cmd.put("startX", sx); cmd.put("startY", sy);
             cmd.put("endX",   ex); cmd.put("endY",   ey);
-            cmd.put("durationMs", 300L);
+            cmd.put("durationMs", swipeDurationMs);
             bridge.control(sessionId, sessionToken, cmd);
 
             try { Thread.sleep(settleMs); }
