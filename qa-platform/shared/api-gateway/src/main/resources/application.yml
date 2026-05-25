@@ -4,11 +4,29 @@ server:
 spring:
   application:
     name: api-gateway
+  # WebFlux DataBuffer chunk size for streamed bodies. The default 256 KB is
+  # fine for normal API traffic but bites us on the APK upload path: every
+  # filter that touches the body (CORS preflight responses, error mapping,
+  # the legacy /api/automation/apps/.../versions POST) needs at least one
+  # full chunk buffered. 512 MB matches automation-service's
+  # spring.servlet.multipart.max-request-size — the gateway will never
+  # need to buffer more than the backend is willing to accept anyway.
+  codec:
+    max-in-memory-size: 512MB
   cloud:
     gateway:
       httpserver:
         wiretap: false
       httpclient:
+        # Long upload streams (500 MB APK over a slow uplink can take
+        # minutes) were closing as "AbortedException: Connection has
+        # been closed" mid-transfer. Reactor Netty defaults to no
+        # connect-timeout and no response-timeout, but Spring Cloud
+        # Gateway applies an implicit 1-second connect + 30-second
+        # response timeout when the values aren't set. Pin them
+        # explicitly so a large multipart upload doesn't time out.
+        connect-timeout: 30000          # 30s — generous for slow upstreams under load
+        response-timeout: 600s          # 10m — enough for 500 MB APK on a 1 Mbit uplink
         websocket:
           # Default is 64 KB which truncates H.264 keyframes. Match the bridge ceiling.
           max-frame-payload-length: 10485760
