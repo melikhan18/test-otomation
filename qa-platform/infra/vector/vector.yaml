@@ -1,0 +1,91 @@
+# Vector pipeline: docker container stdout → JSON parse → OpenSearch.
+#
+# Application services emit JSON (via :common's logback-spring.xml) so the
+# `app_logs` transform unwraps the inner JSON into top-level fields like
+# runId, level, service, logger_name. Anything that isn't JSON (Spring's
+# startup banner, postgres native logs) passes through with `.message` as
+# a plain string.
+#
+# Index naming: `qa-platform-logs-YYYY.MM.DD` (daily) so retention is just
+# index deletion; no document-level TTL pain.
+
+data_dir: /var/lib/vector
+
+# ───────────────────────────  Sources  ────────────────────────────────
+sources:
+  docker:
+    type: docker_logs
+    # Skip Vector itself — recursion would flood OpenSearch with our
+    # own ingest logs.
+    exclude_containers:
+      - qa-platform-vector
+    # Vector annotates each event with .container_id, .container_name,
+    # .image, and .label.* (every docker label, including
+    # com.docker.compose.{project,service}).
+
+# ──────────────────────────  Transforms  ───────────────────────────────
+transforms:
+  # Promote the docker-compose service name to a top-level field so
+  # OpenSearch queries can use `compose_service:"web-runner-service"`
+  # without digging into the label nest.
+  enrich:
+    type: remap
+    inputs: [docker]
+    source: |
+      .compose_service = .label."com.docker.compose.service" || "unknown"
+      .compose_project = .label."com.docker.compose.project" || "unknown"
+      # Drop the verbose label map after promotion — we kept what matters.
+      del(.label)
+
+  # Application logs come in as JSON (Logstash encoder output). If the
+  # message body parses, lift its fields to the root so a query like
+  # `runId:"23" AND level:"INFO"` works without nested field access.
+  # If it doesn't parse (banner, tomcat startup, etc.), leave .message
+  # as-is.
+  app_logs:
+    type: remap
+    inputs: [enrich]
+    source: |
+      parsed, err = parse_json(.message)
+      if err == null && is_object(parsed) {
+        # Carry over selected fields if they exist in the JSON. Using
+        # explicit assignments rather than merging the whole object keeps
+        # OpenSearch mappings clean (avoids exotic types from random
+        # Spring log fields).
+        if exists(parsed."@timestamp") { .timestamp = parsed."@timestamp" }
+        if exists(parsed.level)        { .level     = parsed.level        }
+        if exists(parsed.message)      { .message   = parsed.message      }
+        if exists(parsed.logger_name)  { .logger    = parsed.logger_name  }
+        if exists(parsed.thread_name)  { .thread    = parsed.thread_name  }
+        if exists(parsed.service)      { .service   = parsed.service      }
+        if exists(parsed.env)          { .env       = parsed.env          }
+        if exists(parsed.stack_trace)  { .stack_trace = parsed.stack_trace }
+        # MDC fields we actively set in the orchestrators.
+        if exists(parsed.runId)        { .runId       = parsed.runId        }
+        if exists(parsed.suiteRunId)   { .suiteRunId  = parsed.suiteRunId   }
+        if exists(parsed.scenarioId)   { .scenarioId  = parsed.scenarioId  }
+        if exists(parsed.projectId)    { .projectId   = parsed.projectId   }
+        if exists(parsed.userId)       { .userId      = parsed.userId      }
+        if exists(parsed.requestId)    { .requestId   = parsed.requestId   }
+        if exists(parsed.sessionId)    { .sessionId   = parsed.sessionId   }
+      }
+
+# ────────────────────────────  Sinks  ──────────────────────────────────
+sinks:
+  opensearch:
+    type: elasticsearch
+    inputs: [app_logs]
+    endpoints: ["http://opensearch:9200"]
+    # OpenSearch 2.x speaks the ES 8 wire format — the legacy "_type" field
+    # has been removed. Without this, every bulk request fails with
+    # "unknown parameter [_type]" and Vector drops the batch.
+    api_version: v8
+    mode: bulk
+    bulk:
+      index: "qa-platform-logs-%Y.%m.%d"
+    request:
+      retry_attempts: 5
+    healthcheck:
+      enabled: true
+    # Compression keeps network + storage costs predictable.
+    compression: gzip

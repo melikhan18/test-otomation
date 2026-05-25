@@ -382,57 +382,80 @@ services:
     profiles: ["prod"]
 
   # ── Observability stack ──────────────────────────────────────────────
-  # Loki (log storage) + Promtail (log shipper) + Grafana (UI). All three
-  # ship as official images and run together in ~700 MB RAM total. Promtail
-  # tails every container's stdout/stderr via the Docker socket so no
-  # application code change is needed — the structured JSON each service
-  # emits (see :common/.../logback-spring.xml) lands in Loki ready to query.
+  # OpenSearch (log storage + full-text index) + OpenSearch Dashboards
+  # (Kibana fork, UI) + Fluent Bit (log shipper). Together ~3-4 GB RAM —
+  # heavier than the Loki stack it replaces, but gives true full-text
+  # search and richer query DSL.
   #
-  # In Grafana: `{compose_service="web-runner-service"} | json | runId="N"`
+  # Application logging is unchanged: every service still emits JSON to
+  # stdout via :common's logback-spring.xml. Fluent Bit picks those lines
+  # up from Docker, parses the JSON envelope, and forwards to OpenSearch
+  # under the `qa-platform-logs-*` index pattern.
+  #
+  # In OpenSearch Dashboards (Discover view):
+  #   service:"web-runner-service" AND runId:"N"
   # filters logs for one specific run thanks to the MDC field we set in
   # the orchestrators.
+  #
+  # Security plugin is disabled for local/dev simplicity — OpenSearch
+  # listens only on the internal docker network so there's no external
+  # exposure. For production, flip OPENSEARCH_DISABLE_SECURITY_PLUGIN=false
+  # and front Dashboards with HTTPS + auth.
 
-  loki:
-    image: grafana/loki:3.2.0
-    command: -config.file=/etc/loki/loki-config.yaml
+  opensearch:
+    image: opensearchproject/opensearch:2.18.0
+    environment:
+      cluster.name:                  qa-platform-logs
+      node.name:                     opensearch-node1
+      discovery.type:                single-node
+      bootstrap.memory_lock:         "true"
+      DISABLE_SECURITY_PLUGIN:       "true"
+      DISABLE_INSTALL_DEMO_CONFIG:   "true"
+      # JVM heap. Stay well below the container limit so the OS has cache.
+      OPENSEARCH_JAVA_OPTS:          "-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
-      - ./infra/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - qp_loki:/loki
-    restart: unless-stopped
+      - qp_opensearch:/usr/share/opensearch/data
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
       interval: 10s
-      timeout: 3s
-      retries: 5
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
 
-  promtail:
-    image: grafana/promtail:3.2.0
-    command: -config.file=/etc/promtail/promtail-config.yaml
-    volumes:
-      - ./infra/loki/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - qp_promtail:/var/lib/promtail
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.18.0
+    ports:
+      - "5601:5601"
+    environment:
+      OPENSEARCH_HOSTS:                       '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN:     "true"
     depends_on:
-      loki:
+      opensearch:
         condition: service_healthy
     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:11.3.0
-    ports:
-      - "3001:3000"   # 3000 is taken by vite dev server, expose on 3001
-    environment:
-      GF_SECURITY_ADMIN_USER:     ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
-      GF_AUTH_ANONYMOUS_ENABLED:  "false"
-      GF_USERS_ALLOW_SIGN_UP:     "false"
-      GF_LOG_LEVEL:               "warn"
+  # Vector ships docker container logs to OpenSearch. Picked over Fluent
+  # Bit because Vector's native docker_logs source includes compose
+  # metadata (service name, project, labels) out of the box — Fluent Bit
+  # would need a Lua script to do the same. Vector is also smaller
+  # (~50 MB RAM) and has a cleaner config format.
+  vector:
+    image: timberio/vector:0.42.0-alpine
     volumes:
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
-      - qp_grafana:/var/lib/grafana
+      - ./infra/vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - qp_vector:/var/lib/vector
     depends_on:
-      loki:
+      opensearch:
         condition: service_healthy
     restart: unless-stopped
 
@@ -441,6 +464,5 @@ volumes:
   qp_miniodata:
   qp_caddydata:
   qp_caddyconfig:
-  qp_loki:
-  qp_promtail:
-  qp_grafana:
+  qp_opensearch:
+  qp_vector:
