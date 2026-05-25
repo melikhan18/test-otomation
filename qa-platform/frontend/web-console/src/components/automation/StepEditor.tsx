@@ -2,11 +2,18 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import Combobox, { type ComboOption } from "./Combobox";
+import ActionPicker from "./ActionPicker";
 import {
   STEP_ACTIONS, STEP_ACTION_MAP,
   type ElementView, type StepAction, type StepCreate, type StepUpdate, type TestDataView,
 } from "@/lib/automation";
 import { cn } from "@/lib/cn";
+
+/** Surface these as one-click quick picks above the popover — chosen
+ *  because they cover the bulk of real Android test scripts. */
+const ANDROID_QUICK_PICKS: StepAction[] = [
+  "CLICK", "ENTER_TEXT", "WAIT_FOR_VISIBLE", "SLEEP", "ASSERT_VISIBLE", "ASSERT_TEXT_CONTAINS",
+];
 
 type Props = {
   initial?: {
@@ -27,14 +34,6 @@ type Props = {
   onCancel: () => void;
   onSubmit: (body: StepCreate | StepUpdate) => void;
 };
-
-const CATEGORIES: Array<{ key: "touch" | "input" | "wait" | "assert" | "util"; label: string }> = [
-  { key: "touch",  label: "Touch" },
-  { key: "input",  label: "Input" },
-  { key: "wait",   label: "Wait" },
-  { key: "assert", label: "Verify" },
-  { key: "util",   label: "Util" },
-];
 
 export default function StepEditor({
   initial, elements, testData, busy, submitLabel, onCancel, onSubmit,
@@ -93,40 +92,29 @@ export default function StepEditor({
     });
   }
 
-  // Group actions by category for the action selector
-  const grouped = useMemo(() => CATEGORIES.map((c) => ({
-    ...c,
-    actions: STEP_ACTIONS.filter((a) => a.category === c.key),
+  // Adapt the Android action catalog into the generic picker option model.
+  // The lib stores `category` as the editor's internal key ("touch"); the
+  // picker shows it as a section header, so we humanise here.
+  const pickerOptions = useMemo(() => STEP_ACTIONS.map((a) => ({
+    key: a.key,
+    label: a.label,
+    category: humaniseCategory(a.category),
+    description: a.description,
+    iconName: a.iconName,
+    tone: a.tone,
   })), []);
 
   return (
     <div className="space-y-3">
-      {/* Action picker */}
+      {/* Action picker — quick-pick row + searchable popover. */}
       <div>
         <span className="label block mb-1.5">Action</span>
-        <div className="space-y-2">
-          {grouped.map((g) => (
-            <div key={g.key}>
-              <div className="text-[10px] uppercase tracking-wider text-ink-muted mb-1">{g.label}</div>
-              <div className="flex flex-wrap gap-1.5">
-                {g.actions.map((a) => (
-                  <button
-                    key={a.key}
-                    onClick={() => changeAction(a.key)}
-                    className={cn(
-                      "px-2.5 h-7 rounded-md text-[11px] font-medium border transition-colors",
-                      action === a.key
-                        ? "bg-brand-500/15 border-brand-500/40 text-brand-300"
-                        : "border-surface-border text-ink-secondary hover:text-ink-primary",
-                    )}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ActionPicker
+          value={action}
+          onChange={(k) => changeAction(k as StepAction)}
+          options={pickerOptions}
+          quickPickKeys={ANDROID_QUICK_PICKS}
+        />
       </div>
 
       {/* Element picker */}
@@ -282,4 +270,17 @@ function shortStrategy(s: string): string {
   if (s === "RESOURCE_ID") return "id";
   if (s === "ACCESSIBILITY_ID") return "a11y";
   return s.toLowerCase();
+}
+
+/** "touch" → "Touch", "assert" → "Verify". Matches the older category
+ *  headings so users don't see the raw enum names. */
+function humaniseCategory(key: string): string {
+  switch (key) {
+    case "touch":  return "Touch";
+    case "input":  return "Input";
+    case "wait":   return "Wait";
+    case "assert": return "Verify";
+    case "util":   return "Util";
+    default:       return key.charAt(0).toUpperCase() + key.slice(1);
+  }
 }

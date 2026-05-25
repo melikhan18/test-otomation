@@ -544,45 +544,59 @@ export type StepActionDef = {
   hasTimeout?: boolean;
   /** Color tint for the node. */
   tone: "blue" | "green" | "amber" | "violet" | "gray";
+  /** One-line "what does this do" tooltip shown in the Action picker. */
+  description: string;
+  /** Lucide icon name. Resolved to a component at render time so this module
+   *  stays decoupled from React. */
+  iconName: StepActionIconName;
 };
+
+/** Whitelist of icons the picker is allowed to render. Keeps the bundle
+ *  small (only these get tree-shaken in) and the lib pure-data. */
+export type StepActionIconName =
+  | "MousePointerClick" | "Hand" | "ArrowLeftRight" | "Keyboard" | "Eraser" | "KeyRound"
+  | "Hourglass" | "EyeOff" | "Clock"
+  | "Eye" | "CircleSlash" | "ToggleRight" | "Ban" | "CheckSquare" | "Square" | "CircleDot" | "Target"
+  | "Equal" | "TextSearch" | "Regex" | "Hash"
+  | "Camera" | "MessageSquare";
 
 export const STEP_ACTIONS: StepActionDef[] = [
   /* ─────────────  Touch + Input  ───────────── */
-  { key: "CLICK",                label: "Click",                category: "touch",  needsElement: true,  value: "none",            tone: "blue" },
-  { key: "LONG_PRESS",           label: "Long press",           category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "duration ms (default 1000)", tone: "blue" },
-  { key: "SWIPE",                label: "Swipe",                category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "direction: up/down/left/right", tone: "blue" },
-  { key: "ENTER_TEXT",           label: "Enter text",           category: "input",  needsElement: true,  value: "data-or-literal", tone: "green" },
-  { key: "CLEAR",                label: "Clear input",          category: "input",  needsElement: true,  value: "none",            tone: "green" },
-  { key: "PRESS_KEY",            label: "Press key",            category: "input",  needsElement: false, value: "literal-only",    literalLabel: "BACK | HOME | RECENTS | <keyCode>", tone: "green" },
+  { key: "CLICK",                label: "Click",                category: "touch",  needsElement: true,  value: "none",            tone: "blue",   iconName: "MousePointerClick", description: "Tap the target element once." },
+  { key: "LONG_PRESS",           label: "Long press",           category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "duration ms (default 1000)", tone: "blue", iconName: "Hand", description: "Touch and hold the element for the given duration." },
+  { key: "SWIPE",                label: "Swipe",                category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "direction: up/down/left/right", tone: "blue", iconName: "ArrowLeftRight", description: "Swipe across the element in a direction." },
+  { key: "ENTER_TEXT",           label: "Enter text",           category: "input",  needsElement: true,  value: "data-or-literal", tone: "green",  iconName: "Keyboard", description: "Type text into an input field. Pulls from test data or a literal." },
+  { key: "CLEAR",                label: "Clear input",          category: "input",  needsElement: true,  value: "none",            tone: "green",  iconName: "Eraser", description: "Empty the contents of an input field." },
+  { key: "PRESS_KEY",            label: "Press key",            category: "input",  needsElement: false, value: "literal-only",    literalLabel: "BACK | HOME | RECENTS | <keyCode>", tone: "green", iconName: "KeyRound", description: "Send a hardware/system key event (BACK, HOME, ENTER, …)." },
 
   /* ─────────────  Wait  ───────────── */
-  { key: "WAIT_FOR_VISIBLE",     label: "Wait for visible",     category: "wait",   needsElement: true,  value: "none",            hasTimeout: true, tone: "amber" },
-  { key: "WAIT_FOR_INVISIBLE",   label: "Wait for invisible",   category: "wait",   needsElement: true,  value: "none",            hasTimeout: true, tone: "amber" },
-  { key: "SLEEP",                label: "Sleep",                category: "wait",   needsElement: false, value: "literal-only",    literalLabel: "milliseconds", tone: "amber" },
+  { key: "WAIT_FOR_VISIBLE",     label: "Wait for visible",     category: "wait",   needsElement: true,  value: "none",            hasTimeout: true, tone: "amber", iconName: "Hourglass", description: "Block until the element appears, or fail after timeout." },
+  { key: "WAIT_FOR_INVISIBLE",   label: "Wait for invisible",   category: "wait",   needsElement: true,  value: "none",            hasTimeout: true, tone: "amber", iconName: "EyeOff", description: "Block until the element disappears (e.g. spinner gone)." },
+  { key: "SLEEP",                label: "Sleep",                category: "wait",   needsElement: false, value: "literal-only",    literalLabel: "milliseconds", tone: "amber", iconName: "Clock", description: "Pause for a fixed duration. Use sparingly — prefer Wait actions." },
 
   /* ─────────────  Verify · visibility & presence  ───────────── */
-  { key: "ASSERT_VISIBLE",       label: "Verify visible",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_NOT_VISIBLE",   label: "Verify hidden",        category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_NOT_PRESENT",   label: "Verify not present",   category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_VISIBLE",       label: "Verify visible",       category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "Eye", description: "Fail the step if the element is not visible on screen." },
+  { key: "ASSERT_NOT_VISIBLE",   label: "Verify hidden",        category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "EyeOff", description: "Fail the step if the element is currently visible." },
+  { key: "ASSERT_NOT_PRESENT",   label: "Verify not present",   category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "CircleSlash", description: "Fail the step if the element exists in the view tree at all." },
 
   /* ─────────────  Verify · interactive state  ───────────── */
-  { key: "ASSERT_ENABLED",       label: "Verify enabled",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_DISABLED",      label: "Verify disabled",      category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_CHECKED",       label: "Verify checked",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_UNCHECKED",     label: "Verify unchecked",     category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_SELECTED",      label: "Verify selected",      category: "assert", needsElement: true,  value: "none",            tone: "violet" },
-  { key: "ASSERT_FOCUSED",       label: "Verify focused",       category: "assert", needsElement: true,  value: "none",            tone: "violet" },
+  { key: "ASSERT_ENABLED",       label: "Verify enabled",       category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "ToggleRight", description: "Fail if the element is disabled / not interactive." },
+  { key: "ASSERT_DISABLED",      label: "Verify disabled",      category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "Ban", description: "Fail if the element is enabled." },
+  { key: "ASSERT_CHECKED",       label: "Verify checked",       category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "CheckSquare", description: "Fail if a checkbox / switch is not checked." },
+  { key: "ASSERT_UNCHECKED",     label: "Verify unchecked",     category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "Square", description: "Fail if a checkbox / switch is checked." },
+  { key: "ASSERT_SELECTED",      label: "Verify selected",      category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "CircleDot", description: "Fail if the element is not in the selected state (e.g. tab)." },
+  { key: "ASSERT_FOCUSED",       label: "Verify focused",       category: "assert", needsElement: true,  value: "none",            tone: "violet", iconName: "Target", description: "Fail if the element does not currently have input focus." },
 
   /* ─────────────  Verify · text + value content  ───────────── */
-  { key: "ASSERT_TEXT_EQUALS",   label: "Verify text equals",   category: "assert", needsElement: true,  value: "data-or-literal", tone: "violet" },
-  { key: "ASSERT_TEXT_CONTAINS", label: "Verify text contains", category: "assert", needsElement: true,  value: "data-or-literal", tone: "violet" },
-  { key: "ASSERT_TEXT_MATCHES",  label: "Verify text matches",  category: "assert", needsElement: true,  value: "data-or-literal", literalLabel: "regex (e.g. ^[A-Z]{3}\\d+$)", tone: "violet" },
-  { key: "ASSERT_VALUE_EQUALS",  label: "Verify value equals",  category: "assert", needsElement: true,  value: "data-or-literal", literalLabel: "expected EditText value", tone: "violet" },
-  { key: "ASSERT_ATTRIBUTE",     label: "Verify attribute",     category: "assert", needsElement: true,  value: "literal-only",    literalLabel: "attribute=value (e.g. enabled=true)", tone: "violet" },
+  { key: "ASSERT_TEXT_EQUALS",   label: "Verify text equals",   category: "assert", needsElement: true,  value: "data-or-literal", tone: "violet", iconName: "Equal", description: "Fail unless the element text exactly equals the expected string." },
+  { key: "ASSERT_TEXT_CONTAINS", label: "Verify text contains", category: "assert", needsElement: true,  value: "data-or-literal", tone: "violet", iconName: "TextSearch", description: "Fail unless the element text contains the expected substring." },
+  { key: "ASSERT_TEXT_MATCHES",  label: "Verify text matches",  category: "assert", needsElement: true,  value: "data-or-literal", literalLabel: "regex (e.g. ^[A-Z]{3}\\d+$)", tone: "violet", iconName: "Regex", description: "Fail unless the element text matches the given regex." },
+  { key: "ASSERT_VALUE_EQUALS",  label: "Verify value equals",  category: "assert", needsElement: true,  value: "data-or-literal", literalLabel: "expected EditText value", tone: "violet", iconName: "Equal", description: "Fail unless an EditText's current value equals the expected string." },
+  { key: "ASSERT_ATTRIBUTE",     label: "Verify attribute",     category: "assert", needsElement: true,  value: "literal-only",    literalLabel: "attribute=value (e.g. enabled=true)", tone: "violet", iconName: "Hash", description: "Fail unless a UIAutomator attribute matches (e.g. enabled=true)." },
 
   /* ─────────────  Util  ───────────── */
-  { key: "SCREENSHOT",           label: "Screenshot",           category: "util",   needsElement: false, value: "literal-only",    literalLabel: "label (e.g. login-done)", tone: "gray" },
-  { key: "COMMENT",              label: "Comment",              category: "util",   needsElement: false, value: "literal-only",    literalLabel: "free-form note", tone: "gray" },
+  { key: "SCREENSHOT",           label: "Screenshot",           category: "util",   needsElement: false, value: "literal-only",    literalLabel: "label (e.g. login-done)", tone: "gray", iconName: "Camera", description: "Capture the screen and attach it to the run report." },
+  { key: "COMMENT",              label: "Comment",              category: "util",   needsElement: false, value: "literal-only",    literalLabel: "free-form note", tone: "gray", iconName: "MessageSquare", description: "Inline note — no side effect, just documentation in the run." },
 ];
 
 export const STEP_ACTION_MAP: Record<StepAction, StepActionDef> = Object.fromEntries(
