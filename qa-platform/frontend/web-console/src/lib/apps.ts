@@ -83,6 +83,15 @@ export const appApi = {
       .post<AppVersionView>(`/api/automation/apps/${appId}/versions`, fd, {
         // Axios picks the right boundary; do NOT set Content-Type explicitly or
         // the form boundary header is lost and the server rejects the body.
+        //
+        // Override the global 15s timeout for this call only — a 250 MB APK
+        // on a 5 Mbit/s home uplink is a 7-minute upload. The global value
+        // is fine for normal JSON APIs; APK upload is the one case where it
+        // bites. `0` disables the per-request timeout entirely; the user can
+        // still abort manually and the server enforces its own
+        // multipart.max-request-size (510 MB) and gateway response-timeout
+        // (10 min) as the actual ceilings.
+        timeout: 0,
         onUploadProgress: (e) => {
           if (!onProgress || !e.total) return;
           onProgress(e.loaded / e.total);
