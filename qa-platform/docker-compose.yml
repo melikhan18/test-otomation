@@ -381,88 +381,8 @@ services:
     restart: unless-stopped
     profiles: ["prod"]
 
-  # ── Observability stack ──────────────────────────────────────────────
-  # OpenSearch (log storage + full-text index) + OpenSearch Dashboards
-  # (Kibana fork, UI) + Fluent Bit (log shipper). Together ~3-4 GB RAM —
-  # heavier than the Loki stack it replaces, but gives true full-text
-  # search and richer query DSL.
-  #
-  # Application logging is unchanged: every service still emits JSON to
-  # stdout via :common's logback-spring.xml. Fluent Bit picks those lines
-  # up from Docker, parses the JSON envelope, and forwards to OpenSearch
-  # under the `qa-platform-logs-*` index pattern.
-  #
-  # In OpenSearch Dashboards (Discover view):
-  #   service:"web-runner-service" AND runId:"N"
-  # filters logs for one specific run thanks to the MDC field we set in
-  # the orchestrators.
-  #
-  # Security plugin is disabled for local/dev simplicity — OpenSearch
-  # listens only on the internal docker network so there's no external
-  # exposure. For production, flip OPENSEARCH_DISABLE_SECURITY_PLUGIN=false
-  # and front Dashboards with HTTPS + auth.
-
-  opensearch:
-    image: opensearchproject/opensearch:2.18.0
-    environment:
-      cluster.name:                  qa-platform-logs
-      node.name:                     opensearch-node1
-      discovery.type:                single-node
-      bootstrap.memory_lock:         "true"
-      DISABLE_SECURITY_PLUGIN:       "true"
-      DISABLE_INSTALL_DEMO_CONFIG:   "true"
-      # JVM heap. Stay well below the container limit so the OS has cache.
-      OPENSEARCH_JAVA_OPTS:          "-Xms1g -Xmx1g"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    volumes:
-      - qp_opensearch:/usr/share/opensearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 60s
-    restart: unless-stopped
-
-  opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.18.0
-    ports:
-      - "5601:5601"
-    environment:
-      OPENSEARCH_HOSTS:                       '["http://opensearch:9200"]'
-      DISABLE_SECURITY_DASHBOARDS_PLUGIN:     "true"
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    restart: unless-stopped
-
-  # Vector ships docker container logs to OpenSearch. Picked over Fluent
-  # Bit because Vector's native docker_logs source includes compose
-  # metadata (service name, project, labels) out of the box — Fluent Bit
-  # would need a Lua script to do the same. Vector is also smaller
-  # (~50 MB RAM) and has a cleaner config format.
-  vector:
-    image: timberio/vector:0.42.0-alpine
-    volumes:
-      - ./infra/vector/vector.yaml:/etc/vector/vector.yaml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - qp_vector:/var/lib/vector
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    restart: unless-stopped
-
 volumes:
   qp_pgdata:
   qp_miniodata:
   qp_caddydata:
   qp_caddyconfig:
-  qp_opensearch:
-  qp_vector:
