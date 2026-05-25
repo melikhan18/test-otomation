@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  BarChart3, Building2, Database, FolderKanban, FolderOpen, Globe, LogOut, Monitor, Moon,
+  BarChart3, Building2, Database, FolderKanban, FolderOpen, LogOut, Monitor, Moon,
   Package, ShieldCheck, Smartphone, Sun, Target, UserCircle2, UserCog, Users,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -17,15 +17,14 @@ function buildSections(platformAdmin: boolean, role: EffectiveRole, platform: Pl
 
   // Platform-aware Automation section. Both Android and Web ship the full
   // workspace/elements/test-data parity so users don't relearn the layout
-  // when they switch platforms. Web has no `Apps` (no APK install phase)
-  // and has `Suites` as a sibling page instead of inside a workspace tree.
+  // when they switch platforms. Web has no `Apps` (no APK install phase);
+  // suites live inside the workspace tree just like Android.
   const automationItems: NavItem[] = platform === "WEB"
     ? [
-        { to: "/automation/web",          label: "Scenarios", icon: <Globe size={16} /> },
-        { to: "/automation/web/suites",   label: "Suites",    icon: <FolderKanban size={16} /> },
+        { to: "/automation/web",          label: "Workspace", icon: <FolderKanban size={16} /> },
+        { to: "/automation/reports",      label: "Reports",   icon: <BarChart3 size={16} /> },
         { to: "/automation/web/elements", label: "Elements",  icon: <Target size={16} /> },
         { to: "/automation/web/data",     label: "Test data", icon: <Database size={16} /> },
-        { to: "/automation/reports",      label: "Reports",   icon: <BarChart3 size={16} /> },
       ]
     : [
         { to: "/automation/workspace", label: "Workspace", icon: <FolderKanban size={16} /> },
