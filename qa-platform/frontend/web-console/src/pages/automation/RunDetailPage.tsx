@@ -13,9 +13,13 @@ import { LiveIndicator } from "@/components/LiveIndicator";
 import ReportNav from "@/components/automation/ReportNav";
 import TagEditor from "@/components/automation/TagEditor";
 import {
-  runApi, STEP_ACTION_MAP, type RunStatus, type RunView, type StepResultStatus, type StepResultView,
+  runApi, type RunStatus, type RunView, type StepResultStatus, type StepResultView,
 } from "@/lib/automation";
-import { distinctTags, fetchRunView, platformSupportsRunTagsAndCancel, useReportFeed } from "@/lib/reports";
+import {
+  distinctTags, fetchRunView, lookupActionMeta,
+  platformSupportsRunTagsAndCancel, useReportFeed,
+} from "@/lib/reports";
+import { iconFor } from "@/components/automation/ActionPicker";
 import { useAuthStore } from "@/store/auth";
 import { sessionApi } from "@/lib/sessions";
 import DeviceVideoPlayer from "@/components/DeviceVideoPlayer";
@@ -407,7 +411,11 @@ function StepTimeline({ run }: { run: RunView }) {
 }
 
 function StepRow({ sr, onPreview }: { sr: StepResultView; onPreview: (url: string) => void }) {
-  const def = STEP_ACTION_MAP[sr.action];
+  // Cross-platform lookup — the run could be Android or Web (we adapt the
+  // WEB shape into RunView in fetchRunView). lookupActionMeta tries both
+  // catalogs so FILL / GOTO show their proper label + icon, not "FILL"
+  // with a generic Click icon.
+  const meta = lookupActionMeta(sr.action);
   const Icon  = statusIcon(sr.status);
   const color = statusColor(sr.status);
   return (
@@ -425,9 +433,17 @@ function StepRow({ sr, onPreview }: { sr: StepResultView; onPreview: (url: strin
       </div>
       <div className="flex-1 min-w-0 px-3 py-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-ink-secondary">
-            {def?.label ?? sr.action}
-          </span>
+          {/* Action icon + label — same icon the editor / step list use, so
+              the same step looks the same in three places. */}
+          {(() => {
+            const ActionIcon = iconFor(meta.iconName);
+            return (
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider font-semibold text-ink-secondary">
+                <ActionIcon size={11} />
+                {meta.label}
+              </span>
+            );
+          })()}
           {sr.resolvedLocator && (
             <span className="text-[10px] text-ink-muted font-mono">via {sr.resolvedLocator}</span>
           )}
