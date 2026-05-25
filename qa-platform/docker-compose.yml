@@ -215,6 +215,18 @@ services:
     ports:
       - "${GATEWAY_BIND:-0.0.0.0}:8080:8080"
     restart: unless-stopped
+    # Public entry point — every browser/API request lands here. Without a
+    # healthcheck, `restart: unless-stopped` can't detect a frozen Spring
+    # context (process alive, port open, /actuator/health 503), and any
+    # future `depends_on: api-gateway: { condition: service_healthy }`
+    # would silently downgrade to service_started. Same probe shape as
+    # every other service in this file.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   # ── Android platform stack ────────────────────────────────────────────────────
   android-device-service:
