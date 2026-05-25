@@ -9,7 +9,8 @@ node) but work on any equivalent box.
 | `cleanup.sh`  | Server has leftover docker/projects from old attempts. |
 | `install.sh`  | Bootstraps everything — packages, firewall, swap, docker, build, up. |
 | `update.sh`   | After every `git push` to main — pulls + rebuilds in place. |
-| `monitor.sh`  | Live resource dashboard (CPU/RAM/Swap/Disk + per-container stats). Refresh 1s. |
+| `monitor.sh`      | Live resource dashboard (CPU/RAM/Swap/Disk + per-container stats). Refresh 0.5s. |
+| `monitor-host.sh` | Host-only variant — per-core CPU, RAM, network throughput, top processes. True 0.5s refresh (no docker stats bottleneck). |
 
 All three are **idempotent** (safe to re-run) and **non-destructive of
 data** unless you explicitly ask for cleanup.
@@ -76,14 +77,28 @@ MinIO, and Caddy data volumes are preserved across this.
 
 ## Live monitoring
 
+Two variants, pick whichever matches the situation:
+
 ```bash
-bash deploy/monitor.sh         # 1s refresh
-bash deploy/monitor.sh 2       # every 2s
+bash deploy/monitor.sh              # full: host + every container, 0.5s
+bash deploy/monitor.sh 1            # full: 1s refresh
+
+bash deploy/monitor-host.sh         # host-only: faster + more host detail
+bash deploy/monitor-host.sh 0.25    # 4 updates per second
 ```
 
-Shows colored bars for CPU / RAM / Swap / Disk plus a per-container roster
-(CPU%, MEM, NetIO, health status). Self-contained — no extra packages
-needed. `Ctrl+C` to exit; the script restores the cursor cleanly.
+`monitor.sh` shows colored bars for CPU/RAM/Swap/Disk plus a per-container
+roster (CPU%, MEM, NetIO, health). Its real refresh rate is bounded by
+`docker stats --no-stream` (~0.5–1.5s for 10+ containers), so setting the
+interval below ~0.5s won't actually go faster.
+
+`monitor-host.sh` skips containers entirely and uses the freed budget for
+per-core CPU bars, RAM with cache/buffers detail, network throughput
+(RX/TX rate), and top 5 processes by CPU + by MEM. True sub-second
+refresh (no Docker API call in the loop).
+
+Both repaint in place (no flicker) and restore the cursor cleanly on
+`Ctrl+C`. Zero external dependencies — pure `/proc`, `awk`, `df`, `ps`.
 
 ---
 
