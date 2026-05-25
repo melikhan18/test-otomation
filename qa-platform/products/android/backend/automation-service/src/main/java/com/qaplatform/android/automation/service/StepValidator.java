@@ -91,15 +91,21 @@ public final class StepValidator {
         if (id != null) throw ApiException.badRequest(a.name() + " does not accept a targetElementId");
     }
     private static void requireDataOrLiteral(StepAction a, Long dataId, String literal) {
+        // XOR: exactly one of dataId or literalValue must be set. The
+        // previous implementation had inverted boolean logic
+        // (`(dataId == null) == !hasLiteral` reads as "both missing OR
+        // both set", the opposite of what XOR should be) — picking
+        // value source = Test data triggered a spurious 400. Rewritten
+        // as two flat checks: neither → error, both → error, exactly
+        // one → pass.
         boolean hasLiteral = literal != null && !literal.isBlank();
-        if ((dataId == null) == !hasLiteral) {
-            // ok: exactly one is set
-            if (dataId == null && !hasLiteral) {
-                throw ApiException.badRequest(a.name() + " requires either dataId or literalValue");
-            }
-            return;
+        boolean hasData    = dataId != null;
+        if (!hasLiteral && !hasData) {
+            throw ApiException.badRequest(a.name() + " requires either dataId or literalValue");
         }
-        throw ApiException.badRequest(a.name() + " accepts exactly one of dataId or literalValue, not both");
+        if (hasLiteral && hasData) {
+            throw ApiException.badRequest(a.name() + " accepts exactly one of dataId or literalValue, not both");
+        }
     }
     private static void forbidData(StepAction a, Long dataId) {
         if (dataId != null) throw ApiException.badRequest(a.name() + " does not accept a dataId");
