@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter,
@@ -80,7 +80,11 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["automation-workspace-tree"] }); onAfterDelete(); },
   });
 
-  const [adding, setAdding] = useState(false);
+  // addingAt holds the 0-based insert index when the user has opened a "new
+  // step" editor — null means no editor is open. Insertion at index N pushes
+  // every step previously at order≥N one slot down, so any number from 0 to
+  // steps.length is a valid drop point.
+  const [addingAt, setAddingAt] = useState<number | null>(null);
   const [editingStepId, setEditingStepId] = useState<number | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -88,7 +92,7 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
 
   useEffect(() => {
     setLocalSteps(null);
-    setAdding(false);
+    setAddingAt(null);
     setEditingStepId(null);
     setEditingMeta(false);
     setRunning(false);
@@ -193,14 +197,14 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
           </div>
         </Card>
 
-        {steps.length === 0 && !adding ? (
+        {steps.length === 0 && addingAt == null ? (
           <Card>
             <EmptyState
               icon={<Plus size={20} />}
               title="No steps yet"
               description="Add the first step. You can pick an element from the repository and a value from test data."
               action={
-                <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setAdding(true)}>
+                <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setAddingAt(0)}>
                   Add step
                 </Button>
               }
@@ -211,55 +215,99 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}
               modifiers={[restrictToVerticalAxis, restrictToParentElement]}>
               <SortableContext items={steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                {steps.map((step) => (
-                  <StepCard
-                    key={step.id}
-                    step={step}
-                    isEditing={editingStepId === step.id}
-                    onEdit={() => setEditingStepId(step.id)}
-                    onCancelEdit={() => setEditingStepId(null)}
-                    onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
-                    editForm={
-                      <StepEditor
-                        initial={{
-                          action: step.action,
-                          targetElementId: step.targetElement?.id ?? null,
-                          dataId: step.data?.id ?? null,
-                          literalValue: step.literalValue,
-                          expectedResult: step.expectedResult,
-                          timeoutMs: step.timeoutMs,
-                          retryCount: step.retryCount,
-                          screenshotAfter: step.screenshotAfter,
-                        }}
+                {/* Insert-here line above the first step. Hidden when steps is
+                    empty (the EmptyState card above takes over) but always
+                    present when there's at least one step so users can prepend. */}
+                {steps.length > 0 && (
+                  <InsertHereLine
+                    active={addingAt === 0}
+                    onClick={() => setAddingAt(0)}
+                  />
+                )}
+                {addingAt === 0 && (
+                  <NewStepCard
+                    busy={addStep.isPending}
+                    elements={elementsQ.data ?? []}
+                    testData={dataQ.data ?? []}
+                    onCancel={() => setAddingAt(null)}
+                    onSubmit={(b) => addStep.mutate(
+                      { ...(b as StepCreate), position: 0 },
+                      { onSuccess: () => setAddingAt(null) },
+                    )}
+                  />
+                )}
+                {steps.map((step, idx) => (
+                  <Fragment key={step.id}>
+                    <StepCard
+                      step={step}
+                      isEditing={editingStepId === step.id}
+                      onEdit={() => setEditingStepId(step.id)}
+                      onCancelEdit={() => setEditingStepId(null)}
+                      onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
+                      editForm={
+                        <StepEditor
+                          initial={{
+                            action: step.action,
+                            targetElementId: step.targetElement?.id ?? null,
+                            dataId: step.data?.id ?? null,
+                            literalValue: step.literalValue,
+                            expectedResult: step.expectedResult,
+                            timeoutMs: step.timeoutMs,
+                            retryCount: step.retryCount,
+                            screenshotAfter: step.screenshotAfter,
+                          }}
+                          elements={elementsQ.data ?? []}
+                          testData={dataQ.data ?? []}
+                          busy={updateStep.isPending}
+                          submitLabel="Save"
+                          onCancel={() => setEditingStepId(null)}
+                          onSubmit={(b) => updateStep.mutate({ stepId: step.id, b: b as StepUpdate },
+                            { onSuccess: () => setEditingStepId(null) })}
+                        />
+                      }
+                    />
+                    {/* Insert-here line below each step. Index is idx+1 because
+                        inserting "after step at position idx" pushes everything
+                        at idx+1 onward one slot down. */}
+                    {idx < steps.length - 1 && (
+                      <InsertHereLine
+                        active={addingAt === idx + 1}
+                        onClick={() => setAddingAt(idx + 1)}
+                      />
+                    )}
+                    {addingAt === idx + 1 && idx < steps.length - 1 && (
+                      <NewStepCard
+                        busy={addStep.isPending}
                         elements={elementsQ.data ?? []}
                         testData={dataQ.data ?? []}
-                        busy={updateStep.isPending}
-                        submitLabel="Save"
-                        onCancel={() => setEditingStepId(null)}
-                        onSubmit={(b) => updateStep.mutate({ stepId: step.id, b: b as StepUpdate },
-                          { onSuccess: () => setEditingStepId(null) })}
+                        onCancel={() => setAddingAt(null)}
+                        onSubmit={(b) => addStep.mutate(
+                          { ...(b as StepCreate), position: idx + 1 },
+                          { onSuccess: () => setAddingAt(null) },
+                        )}
                       />
-                    }
-                  />
+                    )}
+                  </Fragment>
                 ))}
               </SortableContext>
             </DndContext>
 
-            {adding ? (
-              <Card className="border-l-2 border-l-brand-500 bg-brand-500/5 p-3">
-                <div className="text-[10px] uppercase tracking-wider font-semibold text-brand-300 mb-3">New step</div>
-                <StepEditor
-                  elements={elementsQ.data ?? []}
-                  testData={dataQ.data ?? []}
-                  busy={addStep.isPending}
-                  submitLabel="Add step"
-                  onCancel={() => setAdding(false)}
-                  onSubmit={(b) => addStep.mutate(b as StepCreate, { onSuccess: () => setAdding(false) })}
-                />
-              </Card>
+            {/* "Add step" pill — always visible at the bottom; activates the
+                editor at the end of the list. */}
+            {addingAt === steps.length ? (
+              <NewStepCard
+                busy={addStep.isPending}
+                elements={elementsQ.data ?? []}
+                testData={dataQ.data ?? []}
+                onCancel={() => setAddingAt(null)}
+                onSubmit={(b) => addStep.mutate(
+                  b as StepCreate, // position omitted = append
+                  { onSuccess: () => setAddingAt(null) },
+                )}
+              />
             ) : (
               <button
-                onClick={() => setAdding(true)}
+                onClick={() => setAddingAt(steps.length)}
                 className="w-full h-10 rounded-md border border-dashed border-surface-border text-ink-secondary hover:text-ink-primary hover:border-brand-500/40 hover:bg-surface-muted/40 transition-colors text-xs inline-flex items-center justify-center gap-1.5"
               >
                 <Plus size={13} /> Add step
@@ -469,5 +517,72 @@ function ScenarioMetaEditor({
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ─────────────────────────  Insert-between affordance  ─────────────────
+ * A thin idle line that becomes a clickable "+ Insert step" pill on hover.
+ * Sits between every pair of step cards (and above the first) so users can
+ * splice a new step at any position instead of only appending to the end.
+ * When `active` is true the line stays highlighted because the editor card
+ * is rendered immediately below it.
+ */
+function InsertHereLine({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "group relative w-full h-3 -my-1 flex items-center justify-center " +
+        "outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded"
+      }
+      title="Insert step here"
+    >
+      <span
+        aria-hidden
+        className={
+          "absolute inset-x-0 top-1/2 -translate-y-1/2 h-px transition-colors " +
+          (active ? "bg-brand-500/60" : "bg-transparent group-hover:bg-brand-500/40")
+        }
+      />
+      <span
+        aria-hidden
+        className={
+          "relative inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold " +
+          "px-2 py-0.5 rounded-full border bg-surface transition-opacity " +
+          (active
+            ? "border-brand-500/60 text-brand-300 opacity-100"
+            : "border-surface-border text-ink-muted opacity-0 group-hover:opacity-100")
+        }
+      >
+        <Plus size={10} /> Insert
+      </span>
+    </button>
+  );
+}
+
+/* ─────────────────────────  New-step editor card  ─────────────────────── */
+
+function NewStepCard({
+  busy, elements, testData, onCancel, onSubmit,
+}: {
+  busy?: boolean;
+  elements: any[];
+  testData: any[];
+  onCancel: () => void;
+  onSubmit: (body: StepCreate) => void;
+}) {
+  return (
+    <Card className="border-l-2 border-l-brand-500 bg-brand-500/5 p-3">
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-brand-300 mb-3">New step</div>
+      <StepEditor
+        elements={elements}
+        testData={testData}
+        busy={busy}
+        submitLabel="Add step"
+        onCancel={onCancel}
+        onSubmit={(b) => onSubmit(b as StepCreate)}
+      />
+    </Card>
   );
 }
