@@ -386,7 +386,10 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"   # HTTP/3 (QUIC) — Caddy advertises it via Alt-Svc
+      # HTTP/3 (QUIC over UDP/443) is explicitly disabled in Caddyfile
+      # because Chrome cancels large POST uploads over HTTP/3 with
+      # H3_REQUEST_CANCELLED after ~15s. Don't expose the UDP port either
+      # — keeps the attack surface tighter and matches the Caddy config.
     volumes:
       - qp_caddydata:/data         # certificates + ACME account state
       - qp_caddyconfig:/config     # runtime config snapshot

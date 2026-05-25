@@ -12,6 +12,20 @@
     # ACME contact email — set ACME_EMAIL in .env. Required by Let's Encrypt's
     # ToS; they email here if a renewal is failing within ~30 days of expiry.
     email {$ACME_EMAIL}
+
+    # HTTP/3 (QUIC) is disabled here. Chrome's HTTP/3 implementation cancels
+    # large POST uploads after ~15s with H3_REQUEST_CANCELLED — observed
+    # consistently while uploading 250 MB+ APKs through /api/automation/apps/
+    # */versions. HTTP/2 handles the same payload reliably. Loss is only the
+    # ~5–10% latency win on tiny request/response pairs, which doesn't matter
+    # for an internal console.
+    #
+    # IMPORTANT: with this set Caddy won't advertise Alt-Svc, so browsers that
+    # *had* previously cached HTTP/3 support for the domain will fall back to
+    # HTTP/2 on the next request — no client-side action needed.
+    servers {
+        protocols h1 h2
+    }
 }
 
 {$DOMAIN}, www.{$DOMAIN} {
