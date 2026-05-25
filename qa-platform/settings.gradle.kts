@@ -41,11 +41,7 @@ includeIfExists(":api-gateway",                "shared/api-gateway")
 includeIfExists(":android-automation-service", "products/android/backend/automation-service")
 includeIfExists(":android-device-service",     "products/android/backend/device-service")
 includeIfExists(":android-session-service",    "products/android/backend/session-service")
-// Folder name kept as `device-bridge-service` (its original) — the gradle
-// module + compose service have been renamed to `android-bridge-service`,
-// but renaming the directory itself is left to a separate, intentional
-// commit since it churns git history for every file underneath.
-includeIfExists(":android-bridge-service",     "products/android/backend/device-bridge-service")
+includeIfExists(":android-bridge-service",     "products/android/backend/android-bridge-service")
 
 // ─── Web platform stack ──────────────────────────────────────────────────────
 includeIfExists(":web-runner-service", "products/web/backend/runner-service")

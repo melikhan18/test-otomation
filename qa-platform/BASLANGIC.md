@@ -190,7 +190,7 @@ Session sayfasında:
 
 ```powershell
 # Servis logları (Docker mode)
-docker compose logs -f device-bridge-service
+docker compose logs -f android-bridge-service
 docker compose logs -f auth-service
 
 # Postgres'e bağlan

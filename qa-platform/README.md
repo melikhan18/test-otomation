@@ -155,10 +155,10 @@ qa-platform/
 ├── products/                          # per-platform stacks
 │   └── android/
 │       └── backend/
-│           ├── device-service/        # :8082
-│           ├── session-service/       # :8083
-│           ├── device-bridge-service/ # :8084  (WebFlux)
-│           └── automation-service/    # :8085  (+ APK repo, scenarios, runs)
+│           ├── device-service/         # :8082
+│           ├── session-service/        # :8083
+│           ├── android-bridge-service/ # :8084  (WebFlux)
+│           └── automation-service/     # :8085  (+ APK repo, scenarios, runs)
 │   (future: ios/, backend/, web/)
 │
 ├── frontend/

@@ -33,11 +33,12 @@ ENV TZ=UTC
 WORKDIR /opt/app
 
 # curl is needed by every container's healthcheck (probes /actuator/health). The
-# bridge additionally needs ffmpeg for H.264 → MP4 remux. Match on either the
-# gradle module name (`android-bridge-service`, current) OR the legacy
-# `device-bridge-service` name in case an older compose/CI still uses it — both
-# are the same image responsibility and missing ffmpeg silently drops every
-# run's video (no MP4, no upload, blank Recording panel for PASS *and* FAIL).
+# bridge additionally needs ffmpeg for H.264 → MP4 remux. Match on the gradle
+# module name (`android-bridge-service`, current) AND the legacy
+# `device-bridge-service` name in case any out-of-tree compose override or CI
+# script still passes the old name — missing ffmpeg silently drops every
+# run's video (no MP4, no upload, blank Recording panel for PASS *and* FAIL),
+# so being permissive here is cheap insurance.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl && \
     if [ "$SERVICE" = "android-bridge-service" ] || [ "$SERVICE" = "device-bridge-service" ]; then \

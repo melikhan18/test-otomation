@@ -13,7 +13,7 @@ name: qa-platform
 #
 # Backend layout (F1+):
 #   - Shared kernel:        shared/{api-gateway,auth-service,common}
-#   - Android platform:     products/android/backend/{automation,device,session,device-bridge}-service
+#   - Android platform:     products/android/backend/{automation,device,session,android-bridge}-service
 # The root Dockerfile takes two build args:
 #   SERVICE       — Gradle module short name (also used for the bootJar task)
 #   SERVICE_PATH  — filesystem path of the module's projectDir, so the COPY
@@ -283,7 +283,7 @@ services:
       dockerfile: Dockerfile
       args:
         SERVICE: android-bridge-service
-        SERVICE_PATH: products/android/backend/device-bridge-service
+        SERVICE_PATH: products/android/backend/android-bridge-service
     environment:
       <<: *service-env
     depends_on:

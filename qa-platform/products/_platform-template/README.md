@@ -154,7 +154,7 @@ Device-bound platforms (iOS, future device farms) also need:
 |-----------------------|----------------------------------------------------------------------------------------------------------------|
 | Device registry       | [`android-device-service`](../../products/android/backend/device-service/)                                     |
 | Reservation + locking | [`android-session-service`](../../products/android/backend/session-service/)                                   |
-| WS hub (video + control + inspect) | [`android-bridge-service`](../../products/android/backend/device-bridge-service/)                 |
+| WS hub (video + control + inspect) | [`android-bridge-service`](../../products/android/backend/android-bridge-service/)                |
 | On-device agent       | [`android-agent`](../../products/android/agent/android-agent/)                                                 |
 
 Copy each of those as a sibling under `products/{platform}/backend/`
