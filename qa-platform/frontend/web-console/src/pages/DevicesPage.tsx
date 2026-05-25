@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Check, ChevronRight, Copy, KeyRound, Lock, Plus, Search, Smartphone, Unlock, X,
+  Check, ChevronRight, Copy, KeyRound, Lock, Plus, Search, Smartphone, X,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";

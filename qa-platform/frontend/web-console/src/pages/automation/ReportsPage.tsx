@@ -20,7 +20,7 @@ import {
   type RunStatus, type RunSummary, type SuiteRunStatus, type SuiteRunSummary,
 } from "@/lib/automation";
 import {
-  distinctTags, matchesTagFilter, useReportFeed, type ReportItem,
+  distinctTags, matchesTagFilter, useReportFeed,
   platformSupportsRunTagsAndCancel,
 } from "@/lib/reports";
 import { useAuthStore } from "@/store/auth";

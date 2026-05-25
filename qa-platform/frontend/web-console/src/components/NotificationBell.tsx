@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertOctagon, Bell, BellRing, CheckCircle2, Layers, ListChecks, Mail, X, XCircle,
+  AlertOctagon, Bell, BellRing, CheckCircle2, Layers, Mail, X, XCircle,
 } from "lucide-react";
 import {
   notificationApi, openNotificationStream,
