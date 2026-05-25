@@ -56,21 +56,62 @@ public class ApkMetadataReader {
         try {
             List<IconFace> icons = parser.getAllIcons();
             if (icons == null || icons.isEmpty()) return null;
-            IconFace best = icons.get(0);
+
+            // Filter to icons that are actually raster images. apk-parser
+            // returns adaptive-icon XML drawables (Android 8+) as bytes too —
+            // we have to skip those because the browser can't render Android
+            // binary XML, and trusting the file path's extension is unreliable
+            // (some APKs ship .png paths that are actually XML).
+            //
+            // Pick the LARGEST valid raster under MAX_ICON_BYTES — bigger
+            // usually = higher DPI = nicer thumb.
+            IconFace best = null;
+            String bestMime = null;
             for (IconFace i : icons) {
-                if (i.getData() == null) continue;
-                if (best.getData() == null || i.getData().length > best.getData().length) {
-                    if (i.getData().length <= MAX_ICON_BYTES) best = i;
+                byte[] data = i.getData();
+                if (data == null || data.length == 0)        continue;
+                if (data.length > MAX_ICON_BYTES)            continue;
+                String mime = detectImageMime(data);
+                if (mime == null)                            continue;  // not PNG/JPG/WebP/GIF — likely adaptive XML
+                if (best == null || data.length > best.getData().length) {
+                    best = i;
+                    bestMime = mime;
                 }
             }
-            if (best.getData() == null || best.getData().length == 0) return null;
-            if (best.getData().length > MAX_ICON_BYTES) return null;
-            String mime = best.getPath() != null && best.getPath().endsWith(".webp") ? "image/webp" : "image/png";
-            return "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(best.getData());
+            if (best == null) return null;
+            return "data:" + bestMime + ";base64," + Base64.getEncoder().encodeToString(best.getData());
         } catch (Exception e) {
             log.debug("icon extract failed (non-fatal): {}", e.toString());
             return null;
         }
+    }
+
+    /**
+     * Detects the image format from magic bytes. Returns null if the buffer
+     * isn't a recognised raster format — that's the signal to skip an
+     * adaptive-icon XML, an SVG, or any other oddity the parser returned.
+     */
+    private static String detectImageMime(byte[] data) {
+        if (data == null || data.length < 4) return null;
+        // PNG: 89 50 4E 47 0D 0A 1A 0A
+        if ((data[0] & 0xFF) == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G') {
+            return "image/png";
+        }
+        // JPEG: FF D8 FF
+        if ((data[0] & 0xFF) == 0xFF && (data[1] & 0xFF) == 0xD8 && (data[2] & 0xFF) == 0xFF) {
+            return "image/jpeg";
+        }
+        // WebP: RIFF....WEBP
+        if (data.length >= 12
+                && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F'
+                && data[8] == 'W' && data[9] == 'E' && data[10] == 'B' && data[11] == 'P') {
+            return "image/webp";
+        }
+        // GIF: GIF87a or GIF89a
+        if (data[0] == 'G' && data[1] == 'I' && data[2] == 'F' && data[3] == '8') {
+            return "image/gif";
+        }
+        return null;
     }
 
     public record ApkMetadata(

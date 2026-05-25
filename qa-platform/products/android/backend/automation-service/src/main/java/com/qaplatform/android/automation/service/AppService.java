@@ -147,8 +147,11 @@ public class AppService {
             v.setNotes(nullIfBlank(notes));
             versions.save(v);
 
-            // First upload also seeds the app icon if not yet set.
-            if (app.getIconData() == null && meta.iconData() != null) {
+            // Set the app icon on first upload, OR refresh it if the
+            // stored one is missing/invalid. The "invalid" check catches
+            // legacy rows that V16 nullified (or any future case where a
+            // newer parser version recognises a format the old one missed).
+            if (meta.iconData() != null && app.getIconData() == null) {
                 app.setIconData(meta.iconData());
             }
             // touch updatedAt
