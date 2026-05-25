@@ -2,11 +2,13 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   runApi, suiteRunApi,
+  STEP_ACTION_MAP,
   type RunSummary, type RunView, type SuiteRunSummary, type SuiteRunView,
   type SuiteRunChild, type StepResultView,
 } from "@/lib/automation";
 import {
   webRunApi, webSuiteRunApi,
+  WEB_STEP_ACTION_MAP,
   type WebRunSummary, type WebRunView, type WebStepResultView,
   type WebSuiteRunSummary, type WebSuiteRunView, type WebSuiteRunChild,
 } from "@/lib/webAutomation";
@@ -312,4 +314,28 @@ export function neighborPath(n: Neighbor): string | null {
  *  controls when this returns false. */
 export function platformSupportsRunTagsAndCancel(p: Platform): boolean {
   return p === "ANDROID";
+}
+
+/* ────────────────────  Cross-platform step-action lookup  ─────────────── */
+
+/** Minimal shape the run-detail step row needs to render a row that
+ *  doesn't know which platform the underlying run came from. */
+export type UnifiedActionMeta = {
+  label: string;
+  iconName: string;
+  tone: "blue" | "green" | "amber" | "violet" | "gray";
+};
+
+/**
+ * Resolves an action key against both platforms' catalogs. RunDetailPage
+ * receives the action as a free-form string after the WEB→Android adapter
+ * coerces the type; this helper makes sure we still get the right icon /
+ * label / tone whether the run originated on Android or Web.
+ */
+export function lookupActionMeta(actionKey: string): UnifiedActionMeta {
+  const android = (STEP_ACTION_MAP as Record<string, { label: string; iconName: string; tone: UnifiedActionMeta["tone"] }>)[actionKey];
+  if (android) return { label: android.label, iconName: android.iconName, tone: android.tone };
+  const web = (WEB_STEP_ACTION_MAP as Record<string, { label: string; iconName: string; tone: UnifiedActionMeta["tone"] }>)[actionKey];
+  if (web) return { label: web.label, iconName: web.iconName, tone: web.tone };
+  return { label: actionKey, iconName: "MousePointerClick", tone: "gray" };
 }

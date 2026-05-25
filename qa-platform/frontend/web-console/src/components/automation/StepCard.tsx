@@ -7,6 +7,7 @@ import {
 import {
   STEP_ACTION_MAP, type StepActionDef, type StepView,
 } from "@/lib/automation";
+import { iconFor } from "@/components/automation/ActionPicker";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -69,9 +70,17 @@ export default function StepCard({ step, isEditing, onEdit, onCancelEdit, onDele
         </div>
 
         <div className="flex-1 min-w-0 px-3 py-2 flex items-center gap-3">
-          <span className={cn("text-[10px] font-mono uppercase tracking-wider font-semibold shrink-0", TONE_TEXT[def?.tone ?? "gray"])}>
-            {def?.label ?? step.action}
-          </span>
+          {/* Action icon + label — same icon the picker showed when this
+              step was created, so users get a consistent visual cue. */}
+          {(() => {
+            const Icon = iconFor(def?.iconName);
+            return (
+              <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider font-semibold shrink-0", TONE_TEXT[def?.tone ?? "gray"])}>
+                <Icon size={12} />
+                {def?.label ?? step.action}
+              </span>
+            );
+          })()}
 
           <StepSummary step={step} />
 

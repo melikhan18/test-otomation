@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
-import ActionPicker from "@/components/automation/ActionPicker";
+import ActionPicker, { iconFor } from "@/components/automation/ActionPicker";
 import { cn } from "@/lib/cn";
 import {
   browserApi, webElementApi, webRunApi, webScenarioApi, webTestDataApi,
@@ -311,16 +311,24 @@ function StepRow({
         <div className="text-[10px] text-ink-muted w-6 text-right pt-0.5 font-mono">{step.orderIndex + 1}</div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className={cn(
-              "inline-flex items-center text-[10px] font-medium uppercase tracking-wider rounded px-1.5 py-0.5 border",
-              def?.tone === "blue"   && "border-brand-500/40   bg-brand-500/10   text-brand-300",
-              def?.tone === "green"  && "border-success-500/40 bg-success-500/10 text-success-500",
-              def?.tone === "amber"  && "border-warning-500/40 bg-warning-500/10 text-warning-500",
-              def?.tone === "violet" && "border-danger-500/30  bg-danger-500/10  text-danger-500",
-              def?.tone === "gray"   && "border-surface-border bg-surface-muted  text-ink-secondary",
-            )}>
-              {def?.label ?? step.action}
-            </span>
+            {/* Action badge — picks up the icon the picker showed when this
+                step was created so the visual cue stays consistent. */}
+            {(() => {
+              const Icon = iconFor(def?.iconName);
+              return (
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider rounded px-1.5 py-0.5 border",
+                  def?.tone === "blue"   && "border-brand-500/40   bg-brand-500/10   text-brand-300",
+                  def?.tone === "green"  && "border-success-500/40 bg-success-500/10 text-success-500",
+                  def?.tone === "amber"  && "border-warning-500/40 bg-warning-500/10 text-warning-500",
+                  def?.tone === "violet" && "border-danger-500/30  bg-danger-500/10  text-danger-500",
+                  def?.tone === "gray"   && "border-surface-border bg-surface-muted  text-ink-secondary",
+                )}>
+                  <Icon size={11} />
+                  {def?.label ?? step.action}
+                </span>
+              );
+            })()}
             {step.targetElementId != null && (
               <span className="text-[10px] text-brand-300">→ element #{step.targetElementId}</span>
             )}
