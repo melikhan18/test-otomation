@@ -11,14 +11,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-/opt/qa-platform}"
-
 B() { printf '\n\033[1;34m▶ %s\033[0m\n' "$*"; }
 G() { printf '\033[32m  ✓ %s\033[0m\n' "$*"; }
 R() { printf '\033[31m  ✗ %s\033[0m\n' "$*"; }
 
 [[ $EUID -eq 0 ]] || { R "Run as root (sudo bash $0)"; exit 1; }
-[[ -d "$INSTALL_DIR" ]] || { R "$INSTALL_DIR does not exist. Run install.sh first."; exit 1; }
+
+# Anchor to the project root by walking up from this script's directory.
+# Works whether the repo lives at /opt/qa-platform, /opt/test-otomation/qa-platform,
+# or any other path — no hard-coded install location to keep in sync with README.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+[[ -f "$INSTALL_DIR/docker-compose.yml" ]] || { R "$INSTALL_DIR doesn't look like a qa-platform checkout (no docker-compose.yml)"; exit 1; }
 cd "$INSTALL_DIR"
 
 B "Pulling latest changes"

@@ -27,12 +27,16 @@ Then on the server:
 ```bash
 ssh root@<server-ip>
 
-# 1. Wipe any old state (skip if server is virgin)
-git clone <REPO_URL> /opt/qa-platform
-cd /opt/qa-platform
-bash deploy/cleanup.sh           # answers 'yes' to confirm
+# 1. Clone the repo. The project root is one level inside the repo
+# (the repo has a top-level qa-platform/ subdir), so the install path
+# you'll actually `cd` into is /opt/test-otomation/qa-platform.
+git clone https://github.com/melikhan18/test-otomation.git /opt/test-otomation
+cd /opt/test-otomation/qa-platform
 
-# 2. Install + boot
+# 2. Wipe any old state (skip if server is virgin)
+bash deploy/cleanup.sh           # answer 'yes' to confirm
+
+# 3. Install + boot
 bash deploy/install.sh
 ```
 
@@ -57,7 +61,7 @@ When it finishes you'll see the admin password printed in a box. Visit
 
 ```bash
 ssh root@<server-ip>
-cd /opt/qa-platform
+cd /opt/test-otomation/qa-platform
 bash deploy/update.sh
 ```
 
@@ -72,7 +76,7 @@ MinIO, and Caddy data volumes are preserved across this.
 If you want to wipe the entire deployment and reinstall from scratch:
 
 ```bash
-cd /opt/qa-platform
+cd /opt/test-otomation/qa-platform
 docker compose --profile prod down -v   # NOTE: -v drops all data volumes
 bash deploy/cleanup.sh --yes
 bash deploy/install.sh
@@ -93,8 +97,8 @@ and TLS certificate. New certs will be issued on next boot.
 | UFW rules | 22 (SSH), 80, 443 TCP, 443 UDP (HTTP/3) — everything else denied |
 | `/etc/apt/sources.list.d/docker.list` | Official Docker CE repo |
 | `docker-ce` + `docker-compose-plugin` | If not already installed |
-| `/opt/qa-platform/` | Repo checkout (skipped if you already cloned here) |
-| `/opt/qa-platform/.env` | Generated once on first run |
+| `/opt/test-otomation/qa-platform/` | Project root inside the cloned repo |
+| `/opt/test-otomation/qa-platform/.env` | Generated once on first run |
 | `/root/qa-platform-credentials.txt` | Plain-text credential backup |
 
 Everything is reversible by running `cleanup.sh` plus removing the swapfile
