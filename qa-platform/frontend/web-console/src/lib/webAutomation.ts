@@ -178,8 +178,10 @@ export const webScenarioApi = {
     api.put<WebStepView>(`/api/scenarios/${sid}/steps/${stepId}`, body).then((r) => r.data),
   deleteStep: (sid: number, stepId: number) =>
     api.delete<void>(`/api/scenarios/${sid}/steps/${stepId}`).then((r) => r.data),
-  reorderSteps: (sid: number, stepIds: number[]) =>
-    api.post<void>(`/api/scenarios/${sid}/steps/reorder`, { stepIds }).then((r) => r.data),
+  // Backend exposes /api/scenarios/{id}/steps/reorder, but the WEB workspace
+  // ships without drag-and-drop reorder — users splice steps via the
+  // insert-here lines / position parameter on addStep instead. Keeping this
+  // method around just so callers can find it is just dead surface area.
 };
 
 /* ──────────────────────────  Runs  ──────────────────────────────────── */
@@ -398,8 +400,9 @@ export const webSuiteApi = {
     api.post<WebSuiteView>(`/api/suites/${suiteId}/scenarios`, { scenarioId }).then((r) => r.data),
   removeScenario: (suiteId: number, scenarioId: number) =>
     api.delete<void>(`/api/suites/${suiteId}/scenarios/${scenarioId}`).then((r) => r.data),
-  reorderScenarios: (suiteId: number, scenarioIds: number[]) =>
-    api.post<void>(`/api/suites/${suiteId}/scenarios/reorder`, { scenarioIds }).then((r) => r.data),
+  // Backend exposes /api/suites/{id}/scenarios/reorder, but the WEB suite
+  // panel has no DnD — scenarios are added/removed only, order isn't user-
+  // editable for v1. Dropping the client method keeps the surface honest.
 };
 
 /* ──────────────────────────  Suite runs  ────────────────────────────── */
