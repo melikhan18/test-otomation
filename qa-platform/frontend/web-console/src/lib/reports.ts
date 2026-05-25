@@ -153,9 +153,12 @@ function adaptWebSuiteRun(s: WebSuiteRunSummary): SuiteRunSummary {
 
 function adaptWebStepResult(r: WebStepResultView, idx: number): StepResultView {
   return {
+    // Keep the real step id — the run-detail tree renderer needs it as a
+    // node key when grouping children under their IF parent. Without this
+    // every IF row would share id=null and tree building would collapse.
     id: r.id,
-    stepId: null,
-    orderIndex: idx,
+    stepId: r.stepId,
+    orderIndex: r.orderIndex ?? idx,
     action: r.action as unknown as StepResultView["action"],
     status: r.status,
     startedAt: r.startedAt,
@@ -165,6 +168,9 @@ function adaptWebStepResult(r: WebStepResultView, idx: number): StepResultView {
     screenshotUrl: r.screenshotUrl,
     resolvedLocator: null,
     retriesUsed: 0,
+    parentStepId: r.parentStepId,
+    branchLabel: r.branchLabel,
+    condition: r.condition,
   };
 }
 

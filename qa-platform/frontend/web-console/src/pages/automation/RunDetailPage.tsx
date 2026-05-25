@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertOctagon, CheckCircle2, Clock, Hourglass, MinusCircle, Package, PauseCircle, RefreshCcw, X, XCircle,
+  AlertOctagon, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranch,
+  Hourglass, MinusCircle, Package, PauseCircle, RefreshCcw, X, XCircle,
 } from "lucide-react";
 import TopBar from "@/components/TopBar";
 import { Button } from "@/components/ui/Button";
@@ -397,17 +398,228 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
 
 function StepTimeline({ run }: { run: RunView }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
+
+  // Group step results by parent stepId so we can render the same tree
+  // the editor shows. Android runs (no IFs) collapse to a single root
+  // bucket and the renderer falls back to a flat list — the parentStepId
+  // field is null on every row there.
+  const byParent = new Map<number | null, StepResultView[]>();
+  for (const sr of run.stepResults) {
+    const key = sr.parentStepId ?? null;
+    const arr = byParent.get(key) ?? [];
+    arr.push(sr);
+    byParent.set(key, arr);
+  }
+  // Roots come back in the order they were inserted (already orderIndex-sorted
+  // by the backend), but the flat insertion mixed branches → sort each
+  // bucket by orderIndex defensively.
+  for (const arr of byParent.values()) {
+    arr.sort((a, b) => a.orderIndex - b.orderIndex);
+  }
+  const roots = byParent.get(null) ?? [];
+
   return (
     <>
       <div className="space-y-2">
-        {run.stepResults.map((sr) => <StepRow key={sr.id} sr={sr} onPreview={setLightbox} />)}
-        {run.stepResults.length === 0 && (
+        {roots.length === 0 ? (
           <Card className="p-6 text-center text-ink-muted text-sm">No step results recorded.</Card>
+        ) : (
+          <StepResultList nodes={roots} byParent={byParent} onPreview={setLightbox} />
         )}
       </div>
       {lightbox && <ScreenshotLightbox url={lightbox} onClose={() => setLightbox(null)} />}
     </>
   );
+}
+
+/** Renders a block of result nodes (root or one branch lane). For IF
+ *  rows we delegate to IfResultBlock which itself recursively renders
+ *  its then/else lanes via another StepResultList. */
+function StepResultList({
+  nodes, byParent, onPreview,
+}: {
+  nodes: StepResultView[];
+  byParent: Map<number | null, StepResultView[]>;
+  onPreview: (url: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {nodes.map((sr) => (
+        sr.action === ("IF" as any)
+          ? <IfResultBlock key={sr.id} sr={sr} byParent={byParent} onPreview={onPreview} />
+          : <StepRow key={sr.id} sr={sr} onPreview={onPreview} />
+      ))}
+    </div>
+  );
+}
+
+/** Read-only IF result: header with predicate + branch status, two
+ *  collapsible lanes (then / else) showing the recorded outcomes. The
+ *  branch the orchestrator actually picked is highlighted; the skipped
+ *  branch is muted, and we auto-collapse it so the eye lands on what
+ *  ran. Users can expand the skipped branch with one click if they
+ *  want to see what would have run. */
+function IfResultBlock({
+  sr, byParent, onPreview,
+}: {
+  sr: StepResultView;
+  byParent: Map<number | null, StepResultView[]>;
+  onPreview: (url: string) => void;
+}) {
+  const children = sr.stepId != null ? (byParent.get(sr.stepId) ?? []) : [];
+  const thenKids = children.filter((c) => c.branchLabel === "then");
+  const elseKids = children.filter((c) => c.branchLabel === "else");
+
+  const thenRan = thenKids.some((c) => c.status !== "SKIPPED" && c.status !== "PENDING");
+  const elseRan = elseKids.some((c) => c.status !== "SKIPPED" && c.status !== "PENDING");
+
+  const [showThen, setShowThen] = useState(thenRan || thenKids.length > 0);
+  const [showElse, setShowElse] = useState(elseRan);
+
+  const summary = sr.condition ? describeRunCondition(sr.condition as any) : "no condition";
+  const ifStatus = sr.status;
+  const ifTone =
+    ifStatus === "PASSED"  ? "border-l-success-500" :
+    ifStatus === "FAILED" || ifStatus === "ERROR" ? "border-l-danger-500" :
+    ifStatus === "SKIPPED" ? "border-l-surface-border" :
+                             "border-l-warning-500";
+
+  return (
+    <div className={cn("rounded-md border border-surface-border bg-surface", "border-l-2", ifTone)}>
+      {/* IF header row */}
+      <div className="px-3 py-2 flex items-center gap-3 border-b border-surface-border">
+        <div className="text-[11px] font-mono text-ink-muted w-6 text-right">{sr.orderIndex + 1}</div>
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning-500 rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5">
+          <GitBranch size={11} />
+          IF
+        </span>
+        <span className="text-[11px] text-ink-secondary truncate font-mono flex-1">{summary}</span>
+        <StatusBadge tone={statusBadgeTone(ifStatus)}>{ifStatus}</StatusBadge>
+        {sr.durationMs != null && (
+          <span className="text-[10px] text-ink-muted inline-flex items-center gap-1 shrink-0">
+            <Clock size={10} /> {sr.durationMs}ms
+          </span>
+        )}
+      </div>
+      {sr.errorMessage && (
+        <div className="px-3 py-2 text-xs text-danger-500 font-mono break-all border-b border-surface-border">
+          {sr.errorMessage}
+        </div>
+      )}
+
+      {/* THEN lane */}
+      <BranchLane
+        label="Then"
+        tone={thenRan ? "success" : "muted"}
+        ran={thenRan}
+        expanded={showThen}
+        onToggle={() => setShowThen((v) => !v)}
+        children={thenKids}
+        byParent={byParent}
+        onPreview={onPreview}
+        emptyLabel="no steps"
+      />
+
+      {/* ELSE lane — only render if it has any recorded steps (skipped or not).
+          If both branches are empty (an IF without bodies, edge case), show neither. */}
+      {elseKids.length > 0 && (
+        <BranchLane
+          label="Else"
+          tone={elseRan ? "danger" : "muted"}
+          ran={elseRan}
+          expanded={showElse}
+          onToggle={() => setShowElse((v) => !v)}
+          children={elseKids}
+          byParent={byParent}
+          onPreview={onPreview}
+          emptyLabel="no steps"
+        />
+      )}
+    </div>
+  );
+}
+
+function BranchLane({
+  label, tone, ran, expanded, onToggle, children, byParent, onPreview, emptyLabel,
+}: {
+  label: string;
+  tone: "success" | "danger" | "muted";
+  ran: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  children: StepResultView[];
+  byParent: Map<number | null, StepResultView[]>;
+  onPreview: (url: string) => void;
+  emptyLabel: string;
+}) {
+  const borderClass =
+    tone === "success" ? "border-l-success-500/40 bg-success-500/[0.03]" :
+    tone === "danger"  ? "border-l-danger-500/40  bg-danger-500/[0.03]" :
+                         "border-l-surface-border bg-surface-muted/30";
+  const labelClass =
+    tone === "success" ? "text-success-500" :
+    tone === "danger"  ? "text-danger-500" :
+                         "text-ink-muted";
+  return (
+    <div className={cn("border-l-2 ml-3 my-2 mr-2 rounded-r-md", borderClass)}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center gap-2 px-3 py-1.5 text-left"
+        title={expanded ? "Collapse" : "Expand"}
+      >
+        {expanded ? <ChevronDown size={12} className="text-ink-muted" /> : <ChevronRight size={12} className="text-ink-muted" />}
+        <span className={cn("text-[10px] uppercase tracking-wider font-semibold", labelClass)}>{label}</span>
+        <span className="text-[10px] text-ink-muted">
+          {ran ? "executed" : children.length === 0 ? emptyLabel : "skipped"}
+        </span>
+      </button>
+      {expanded && children.length > 0 && (
+        <div className="px-2 pb-2">
+          <StepResultList nodes={children} byParent={byParent} onPreview={onPreview} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One-line human description of an IF condition for the report header. */
+function describeRunCondition(c: {
+  type?: string; subjectId?: number | null; operator?: string; value?: string | null;
+}): string {
+  if (!c || !c.type) return "(unknown condition)";
+  if (c.type === "element_state") {
+    const op =
+      c.operator === "is_visible"    ? "is visible"
+    : c.operator === "is_hidden"     ? "is hidden"
+    : c.operator === "exists"        ? "exists"
+    : c.operator === "text_contains" ? `text contains "${c.value ?? ""}"`
+    : c.operator === "text_equals"   ? `text equals "${c.value ?? ""}"`
+    :                                  c.operator;
+    return `element #${c.subjectId} ${op}`;
+  }
+  if (c.type === "test_data_compare") {
+    const op =
+      c.operator === "equals"        ? "=="
+    : c.operator === "not_equals"    ? "!="
+    : c.operator === "contains"      ? "contains"
+    : c.operator === "greater_than"  ? ">"
+    : c.operator === "less_than"     ? "<"
+    :                                  c.operator;
+    return `data #${c.subjectId} ${op} "${c.value}"`;
+  }
+  return "(unknown condition)";
+}
+
+function statusBadgeTone(s: StepResultStatus): "success" | "danger" | "info" | "warning" | "neutral" {
+  switch (s) {
+    case "PASSED":   return "success";
+    case "FAILED":
+    case "ERROR":    return "danger";
+    case "RUNNING":  return "info";
+    case "SKIPPED":  return "neutral";
+    case "PENDING":  return "warning";
+  }
 }
 
 function StepRow({ sr, onPreview }: { sr: StepResultView; onPreview: (url: string) => void }) {

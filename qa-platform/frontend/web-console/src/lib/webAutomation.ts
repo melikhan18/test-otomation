@@ -232,6 +232,13 @@ export type WebStepResultView = {
   durationMs: number | null;
   errorMessage: string | null;
   screenshotUrl: string | null;
+  /** Tree metadata mirrored from the underlying step entity. Both null =
+   *  root level (legacy flat scenario). Both set = result lived inside
+   *  the IF identified by parentStepId, under that branch. */
+  parentStepId: number | null;
+  branchLabel: "then" | "else" | null;
+  /** Predicate that was evaluated — only present when action === "IF". */
+  condition: WebStepCondition | null;
 };
 
 export type WebRunSummary = {

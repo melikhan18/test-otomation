@@ -359,6 +359,13 @@ export type StepResultView = {
   screenshotUrl: string | null;
   resolvedLocator: string | null;
   retriesUsed: number;
+  /** Tree fields — only populated on the WEB stack (after the V3 IF
+   *  migration). Android always serves null/null here; the run-detail
+   *  renderer falls back to a flat list when both are null. */
+  parentStepId?: number | null;
+  branchLabel?: "then" | "else" | null;
+  /** IF predicate snapshot. WEB-only, only present when action === "IF". */
+  condition?: unknown | null;
 };
 
 export type RunView = {

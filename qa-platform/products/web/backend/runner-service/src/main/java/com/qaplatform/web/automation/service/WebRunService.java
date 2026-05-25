@@ -1,5 +1,7 @@
 package com.qaplatform.web.automation.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qaplatform.common.error.ApiException;
 import com.qaplatform.common.jwt.JwtPrincipal;
 import com.qaplatform.web.automation.api.dto.WebRunDtos;
@@ -8,6 +10,9 @@ import com.qaplatform.web.automation.domain.WebRunEntity;
 import com.qaplatform.web.automation.domain.WebRunRepository;
 import com.qaplatform.web.automation.domain.WebScenarioEntity;
 import com.qaplatform.web.automation.domain.WebScenarioRepository;
+import com.qaplatform.web.automation.domain.WebStepCondition;
+import com.qaplatform.web.automation.domain.WebStepEntity;
+import com.qaplatform.web.automation.domain.WebStepRepository;
 import com.qaplatform.web.automation.domain.WebStepResultEntity;
 import com.qaplatform.web.automation.domain.WebStepResultRepository;
 import com.qaplatform.web.automation.service.run.WebRunOrchestrator;
@@ -17,9 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * REST-facing run management — create / get / list. The actual execution is
@@ -32,19 +39,25 @@ public class WebRunService {
 
     private final WebRunRepository runs;
     private final WebScenarioRepository scenarios;
+    private final WebStepRepository steps;
     private final WebStepResultRepository stepResults;
     private final BrowserCatalog browsers;
     private final WebRunOrchestrator orchestrator;
+    private final ObjectMapper json;
 
     public WebRunService(WebRunRepository runs, WebScenarioRepository scenarios,
+                         WebStepRepository steps,
                          WebStepResultRepository stepResults,
                          BrowserCatalog browsers,
-                         WebRunOrchestrator orchestrator) {
+                         WebRunOrchestrator orchestrator,
+                         ObjectMapper json) {
         this.runs = runs;
         this.scenarios = scenarios;
+        this.steps = steps;
         this.stepResults = stepResults;
         this.browsers = browsers;
         this.orchestrator = orchestrator;
+        this.json = json;
     }
 
     @Transactional
@@ -99,8 +112,27 @@ public class WebRunService {
     private WebRunDtos.View toView(WebRunEntity r) {
         String scenarioName = r.getScenarioId() == null ? null
                 : scenarios.findById(r.getScenarioId()).map(WebScenarioEntity::getName).orElse(null);
-        List<WebRunDtos.StepResultView> srViews = stepResults.findAllByRunIdOrderByOrderIndexAsc(r.getId())
-                .stream().map(WebRunService::toStepResultView).toList();
+
+        List<WebStepResultEntity> results = stepResults.findAllByRunIdOrderByOrderIndexAsc(r.getId());
+
+        // Batch-fetch the underlying step entities so each result row can
+        // carry the tree metadata (parent_step_id, branch_label, condition).
+        // Without this the run detail UI can't tell which step lived in an
+        // IF block, let alone show the predicate that decided the branch.
+        List<Long> stepIds = results.stream()
+                .map(WebStepResultEntity::getStepId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
+        Map<Long, WebStepEntity> stepById = new HashMap<>();
+        if (!stepIds.isEmpty()) {
+            steps.findAllById(stepIds).forEach(s -> stepById.put(s.getId(), s));
+        }
+
+        List<WebRunDtos.StepResultView> srViews = new ArrayList<>(results.size());
+        for (WebStepResultEntity s : results) {
+            srViews.add(toStepResultView(s, stepById.get(s.getStepId())));
+        }
+
         return new WebRunDtos.View(
                 r.getId(), r.getScenarioId(), scenarioName, r.getScenarioVersion(),
                 r.getBrowserProfileId(), r.getEnvironment(),
@@ -112,12 +144,20 @@ public class WebRunService {
         );
     }
 
-    private static WebRunDtos.StepResultView toStepResultView(WebStepResultEntity s) {
+    private WebRunDtos.StepResultView toStepResultView(WebStepResultEntity s, WebStepEntity step) {
+        Long parentStepId = step != null ? step.getParentStepId() : null;
+        String branchLabel = step != null ? step.getBranchLabel() : null;
+        WebStepCondition cond = null;
+        if (step != null && step.getConditionJson() != null && !step.getConditionJson().isBlank()) {
+            try { cond = json.readValue(step.getConditionJson(), WebStepCondition.class); }
+            catch (JsonProcessingException ignore) { /* leave null — UI handles gracefully */ }
+        }
         return new WebRunDtos.StepResultView(
                 s.getId(), s.getStepId(), s.getOrderIndex(), s.getAction(),
                 s.getStatus(),
                 s.getStartedAt(), s.getFinishedAt(), s.getDurationMs(),
-                s.getErrorMessage(), s.getScreenshotUrl()
+                s.getErrorMessage(), s.getScreenshotUrl(),
+                parentStepId, branchLabel, cond
         );
     }
 }
