@@ -38,4 +38,17 @@ subprojects {
     tasks.withType<Test> {
         useJUnitPlatform()
     }
+
+    // Spring Boot's plugin produces both an executable fat jar (the `bootJar`
+    // task) AND a thin classpath jar (the `jar` task) with `-plain` suffix.
+    // We only ship the fat jar — the plain jar exists purely so other gradle
+    // modules can depend on the classes, which we don't need here. Disabling
+    // it shrinks build output and, more importantly, removes the failure
+    // mode where the root Dockerfile's `COPY .../build/libs/*.jar` glob
+    // matches both files and silently picks the wrong one (whichever Docker
+    // happens to COPY last wins — `app.jar` ends up overwritten with the
+    // classpath stub, container fails with "no main manifest attribute").
+    tasks.matching { it.name == "jar" }.configureEach {
+        enabled = false
+    }
 }
