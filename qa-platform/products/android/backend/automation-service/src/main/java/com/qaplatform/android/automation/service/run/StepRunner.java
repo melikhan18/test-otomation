@@ -159,6 +159,18 @@ public class StepRunner {
 
             LocatorResolver.Hit hit = LocatorResolver.resolve(tree, el);
             if (hit != null && hasNonZeroBounds(hit.bounds())) {
+                // Scroll inertia: even though we just found the target, the
+                // list may still be decelerating. If we PASS now, the next
+                // step (typically a CLICK) inspects, reads "current" bounds,
+                // then taps — but by the time the tap reaches the device the
+                // element has scrolled further and the tap lands on a row
+                // slightly above it.
+                //
+                // Wait for the bounds to settle: re-inspect every 100ms; break
+                // the moment the element's bounds repeat (one quiet interval
+                // = inertia is done). Hard cap at 800 ms so we never block
+                // longer than a typical fling animation.
+                waitUntilElementSettles(el, hit.bounds());
                 return StepResult.pass(
                         "scrolled to " + locatorLabel(hit) + " after " + i + " swipes",
                         elapsed(t0));
@@ -224,6 +236,39 @@ public class StepRunner {
 
     private static boolean hasNonZeroBounds(int[] b) {
         return b != null && (b[2] - b[0]) > 0 && (b[3] - b[1]) > 0;
+    }
+
+    /**
+     * Block until the target element's bounds stop changing — i.e. the list
+     * has finished decelerating after the last swipe. We poll the inspect
+     * tree every 100 ms; the moment two consecutive samples have identical
+     * bounds, we know inertia is done and any follow-up CLICK will land on
+     * the actual row. Hard-capped at 800 ms (8 samples) because a typical
+     * fling animation completes inside ~500 ms — if we still haven't seen
+     * stable bounds by then, returning anyway is better than blocking the
+     * step indefinitely (worst case: caller's tap is slightly off, same
+     * symptom we already have).
+     *
+     * <p>If a poll fails to find the element (it scrolled fully off-screen
+     * due to a manual user swipe between samples, agent crashed, etc.) we
+     * just return — there's nothing useful left to wait for, and the next
+     * step will surface the missing-element failure on its own.</p>
+     */
+    private void waitUntilElementSettles(ElementEntity el, int[] startBounds) {
+        final int maxIntervals = 8;
+        final int intervalMs = 100;
+        int[] lastBounds = startBounds;
+        for (int s = 0; s < maxIntervals; s++) {
+            try { Thread.sleep(intervalMs); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); return; }
+            JsonNode tree = bridge.inspect(sessionId, sessionToken, 4);
+            LocatorResolver.Hit hit = LocatorResolver.resolve(tree, el);
+            if (hit == null || !hasNonZeroBounds(hit.bounds())) return;
+            if (java.util.Arrays.equals(hit.bounds(), lastBounds)) {
+                return;  // bounds stable for one interval — inertia is done
+            }
+            lastBounds = hit.bounds();
+        }
     }
 
     /* ─────────────────────────  INPUT  ─────────────────────────── */
