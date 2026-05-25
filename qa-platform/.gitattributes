@@ -1,0 +1,41 @@
+# Force LF on files that *must* be LF regardless of the developer's OS.
+# Without this, a `git clone` on Windows with core.autocrlf=true silently
+# rewrites these to CRLF on checkout and Linux refuses to run them:
+#   bash: ./install.sh: /bin/bash^M: bad interpreter
+#
+# Shell scripts (always LF — bash literally cannot parse \r in shebangs).
+*.sh             text eol=lf
+*.bash           text eol=lf
+
+# Dockerfiles + compose: docker tolerates CRLF in most places but a CRLF in
+# the very first RUN can corrupt the image cache key on Linux builders.
+Dockerfile       text eol=lf
+Dockerfile.*     text eol=lf
+*.dockerfile     text eol=lf
+docker-compose.yml text eol=lf
+
+# Yaml configs the JVM reads — Spring's SnakeYAML strips \r in values but
+# log appenders embed it into output, polluting log lines.
+*.yml            text eol=lf
+*.yaml           text eol=lf
+
+# Caddy / nginx / env files — same logic, all consumed by Linux tools.
+Caddyfile        text eol=lf
+.env             text eol=lf
+.env.*           text eol=lf
+
+# Treat known binary types as binary so git never tries to diff/normalize them.
+*.png            binary
+*.jpg            binary
+*.jpeg           binary
+*.gif            binary
+*.webp           binary
+*.ico            binary
+*.pdf            binary
+*.apk            binary
+*.jar            binary
+*.zip            binary
+*.gz             binary
+*.tgz            binary
+*.mp4            binary
+*.webm           binary
