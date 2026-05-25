@@ -8,33 +8,47 @@
 
 rootProject.name = "qa-platform"
 
-// ─── Shared kernel ───────────────────────────────────────────────────────────
-include(":common")
-include(":auth-service")
-include(":tenant-service")
-include(":reports-aggregator-service")
-include(":api-gateway")
+/**
+ * Conditional include — only register a module if its source dir exists in
+ * the current build context. The root `docker compose build` always has
+ * everything, but per-service Dockerfiles (e.g. `web-runner-service`) copy
+ * only a slim subset of the tree into their build stage to keep image
+ * size + cache hit rate sane. Without this guard, gradle would try to
+ * configure every project on every build and fail with a missing-dir
+ * error the first time some platform's sources weren't staged.
+ *
+ * Gradle's lazy task graph lets us get away with declaring all modules
+ * here as long as the missing ones are never *evaluated* — but that
+ * "as long as" is fragile, especially with plugins that scan all
+ * projects eagerly. Filtering at the include() boundary is simpler
+ * and survives plugin upgrades.
+ */
+fun includeIfExists(name: String, dir: String) {
+    if (file(dir).isDirectory) {
+        include(name)
+        project(name).projectDir = file(dir)
+    }
+}
 
-project(":common").projectDir                    = file("shared/common")
-project(":auth-service").projectDir              = file("shared/auth-service")
-project(":tenant-service").projectDir            = file("shared/tenant-service")
-project(":reports-aggregator-service").projectDir = file("shared/reports-aggregator-service")
-project(":api-gateway").projectDir               = file("shared/api-gateway")
+// ─── Shared kernel ───────────────────────────────────────────────────────────
+includeIfExists(":common",                     "shared/common")
+includeIfExists(":auth-service",               "shared/auth-service")
+includeIfExists(":tenant-service",             "shared/tenant-service")
+includeIfExists(":reports-aggregator-service", "shared/reports-aggregator-service")
+includeIfExists(":api-gateway",                "shared/api-gateway")
 
 // ─── Android platform stack ──────────────────────────────────────────────────
-include(":android-automation-service")
-include(":android-device-service")
-include(":android-session-service")
-include(":android-bridge-service")
-
-project(":android-automation-service").projectDir = file("products/android/backend/automation-service")
-project(":android-device-service").projectDir     = file("products/android/backend/device-service")
-project(":android-session-service").projectDir    = file("products/android/backend/session-service")
-project(":android-bridge-service").projectDir     = file("products/android/backend/device-bridge-service")
+includeIfExists(":android-automation-service", "products/android/backend/automation-service")
+includeIfExists(":android-device-service",     "products/android/backend/device-service")
+includeIfExists(":android-session-service",    "products/android/backend/session-service")
+// Folder name kept as `device-bridge-service` (its original) — the gradle
+// module + compose service have been renamed to `android-bridge-service`,
+// but renaming the directory itself is left to a separate, intentional
+// commit since it churns git history for every file underneath.
+includeIfExists(":android-bridge-service",     "products/android/backend/device-bridge-service")
 
 // ─── Web platform stack ──────────────────────────────────────────────────────
-include(":web-runner-service")
-project(":web-runner-service").projectDir         = file("products/web/backend/runner-service")
+includeIfExists(":web-runner-service", "products/web/backend/runner-service")
 
 // ─── (gelecek platformlar buraya eklenir — iOS, backend) ─────────────────────
 
