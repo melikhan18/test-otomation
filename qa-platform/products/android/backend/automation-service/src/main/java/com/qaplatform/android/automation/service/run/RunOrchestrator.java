@@ -252,15 +252,22 @@ public class RunOrchestrator {
                 }
             }
         } finally {
-            // Order matters: stop+upload the recording BEFORE releasing the session.
-            // Releasing closes the device channel; if the recorder is still subscribed
-            // it would lose the very last frames. captureAndAttachVideo handles the
-            // VIDEO_TAIL_MS pause so the screen's final state lands in the MP4.
-            captureAndAttachVideo(reservation.sessionId(), reservation.sessionToken(), runId);
+            // Every step here is wrapped in its own try/catch. Without this,
+            // a thrown captureAndAttachVideo or resetHome short-circuits the
+            // rest of the finally block — most importantly sessions.release —
+            // and the device stays IN_USE indefinitely (OrphanedSessionReaper
+            // only catches OFFLINE devices, not online-but-leaked-by-us ones).
+            //
+            // Order still matters: stop+upload recording first (so the final
+            // UI frame lands in the MP4), then reset-home, then release. But
+            // each is independent for fault-tolerance purposes.
+            try {
+                captureAndAttachVideo(reservation.sessionId(), reservation.sessionToken(), runId);
+            } catch (Exception e) {
+                log.warn("captureAndAttachVideo for run {} threw: {}", runId, e.toString(), e);
+            }
             // ── Faz 4: post-run reset-home ──────────────────────────────────
             // Best-effort — must NOT throw or fail the run that just finished.
-            // Done after the recording stops so the final UI state is preserved,
-            // and before session release so the session token is still valid.
             if (run.isResetHomeAfter()) {
                 try {
                     bridge.resetHome(reservation.sessionId(), reservation.sessionToken(),
@@ -269,10 +276,20 @@ public class RunOrchestrator {
                     log.warn("reset-home for run {} threw: {}", runId, e.toString());
                 }
             }
-            sessions.release(reservation.sessionId(), userJwt);
+            // CRITICAL: release MUST run regardless of what happened above.
+            // Logging at ERROR so the structured log aggregator flags it —
+            // a release failure means the next run on this device will be
+            // rejected with "device in use" until the session reaper kicks
+            // in (which only happens if the agent goes offline).
+            try {
+                sessions.release(reservation.sessionId(), userJwt);
+            } catch (Exception e) {
+                log.error("session release FAILED for run {} (session {}) — device may leak as IN_USE: {}",
+                        runId, reservation.sessionId(), e.toString(), e);
+            }
             // Free the cancel-flag slot — even if no cancel was requested, removing
             // a non-existent key is a no-op.
-            cancels.clear(runId);
+            try { cancels.clear(runId); } catch (Exception e) { /* never throws */ }
         }
 
         if (cancelled) finalizeCancelled(run);
