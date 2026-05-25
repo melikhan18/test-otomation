@@ -9,6 +9,7 @@ node) but work on any equivalent box.
 | `cleanup.sh`  | Server has leftover docker/projects from old attempts. |
 | `install.sh`  | Bootstraps everything — packages, firewall, swap, docker, build, up. |
 | `update.sh`   | After every `git push` to main — pulls + rebuilds in place. |
+| `monitor.sh`  | Live resource dashboard (CPU/RAM/Swap/Disk + per-container stats). Refresh 1s. |
 
 All three are **idempotent** (safe to re-run) and **non-destructive of
 data** unless you explicitly ask for cleanup.
@@ -68,6 +69,21 @@ bash deploy/update.sh
 Pulls `main`, runs `docker compose build` (uses cache where possible), then
 `up -d` to recreate only the containers whose images changed. Postgres,
 MinIO, and Caddy data volumes are preserved across this.
+
+---
+
+---
+
+## Live monitoring
+
+```bash
+bash deploy/monitor.sh         # 1s refresh
+bash deploy/monitor.sh 2       # every 2s
+```
+
+Shows colored bars for CPU / RAM / Swap / Disk plus a per-container roster
+(CPU%, MEM, NetIO, health status). Self-contained — no extra packages
+needed. `Ctrl+C` to exit; the script restores the cursor cleanly.
 
 ---
 
