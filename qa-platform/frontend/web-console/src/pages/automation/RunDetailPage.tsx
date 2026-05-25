@@ -15,7 +15,7 @@ import TagEditor from "@/components/automation/TagEditor";
 import {
   runApi, STEP_ACTION_MAP, type RunStatus, type RunView, type StepResultStatus, type StepResultView,
 } from "@/lib/automation";
-import { distinctTags, useReportFeed } from "@/lib/reports";
+import { distinctTags, fetchRunView, platformSupportsRunTagsAndCancel, useReportFeed } from "@/lib/reports";
 import { useAuthStore } from "@/store/auth";
 import { sessionApi } from "@/lib/sessions";
 import DeviceVideoPlayer from "@/components/DeviceVideoPlayer";
@@ -28,6 +28,7 @@ export default function RunDetailPage() {
   const nav = useNavigate();
   const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
+  const platform       = useAuthStore((s) => s.activePlatform);
 
   // The run id in the URL belongs to whatever project was active when the user
   // landed here. If they switch tenancy in the sidebar, this id is suddenly in
@@ -46,10 +47,13 @@ export default function RunDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCompanyId, activeProjectId]);
 
-  // Poll while the run is in flight; back off once it's terminal.
+  // Poll while the run is in flight; back off once it's terminal. The fetcher
+  // is platform-aware — on WEB we hit /api/runs (gateway-routed to the web
+  // runner) and adapt the response back into the unified RunView shape so the
+  // rest of the page renders the same way for both stacks.
   const runQ = useQuery({
-    queryKey: ["automation-run", activeCompanyId ?? null, id],
-    queryFn: () => runApi.get(id),
+    queryKey: ["automation-run", platform, activeCompanyId ?? null, id],
+    queryFn: () => fetchRunView(platform, id),
     enabled: !Number.isNaN(id) && activeCompanyId != null,
     refetchOnWindowFocus: false,
     refetchInterval: (q) => {
@@ -297,12 +301,14 @@ function appPrepTone(status: string): "success" | "warning" | "danger" | "neutra
 /* ─────────────────────────────  Header  ────────────────────────────── */
 
 function RunHeader({ run, suggestions }: { run: RunView; suggestions: string[] }) {
+  const platform = useAuthStore((s) => s.activePlatform);
+  const supportsTagsCancel = platformSupportsRunTagsAndCancel(platform);
   const qc = useQueryClient();
   const tagsMut = useMutation({
     mutationFn: (tags: string[]) => runApi.updateTags(run.id, tags),
     onSuccess: (next) => {
       qc.setQueryData(["automation-run", run.id], next);
-      qc.invalidateQueries({ queryKey: ["automation-runs"] });
+      qc.invalidateQueries({ queryKey: ["report-runs"] });
     },
   });
   const passRate = run.totalSteps > 0 ? (run.passedSteps / run.totalSteps) * 100 : 0;
@@ -323,24 +329,30 @@ function RunHeader({ run, suggestions }: { run: RunView; suggestions: string[] }
             {run.scenarioVersion != null && <span className="text-[10px] text-ink-muted font-mono ml-1">v{run.scenarioVersion}</span>}
           </div>
           <div className="text-xs text-ink-muted mt-1 flex items-center gap-3 flex-wrap">
-            <span>Device #{run.deviceId}</span>
+            {platform === "WEB"
+              ? <span>browser run</span>
+              : <span>Device #{run.deviceId}</span>}
             <span>env <code className="font-mono">{run.environment}</code></span>
-            <span>
-              pacing{" "}
-              {run.adaptiveWait
-                ? <code className="font-mono">adaptive</code>
-                : <code className="font-mono">{run.interStepDelayMs}ms</code>}
-            </span>
+            {platform !== "WEB" && (
+              <span>
+                pacing{" "}
+                {run.adaptiveWait
+                  ? <code className="font-mono">adaptive</code>
+                  : <code className="font-mono">{run.interStepDelayMs}ms</code>}
+              </span>
+            )}
             <span>created {new Date(run.createdAt).toLocaleTimeString()}</span>
             {run.durationMs != null && <span>· {(run.durationMs / 1000).toFixed(1)}s</span>}
           </div>
-          <div className="mt-2">
-            <TagEditor
-              tags={run.tags ?? []}
-              suggestions={suggestions}
-              onChange={(next) => tagsMut.mutateAsync(next).then(() => undefined)}
-            />
-          </div>
+          {supportsTagsCancel && (
+            <div className="mt-2">
+              <TagEditor
+                tags={run.tags ?? []}
+                suggestions={suggestions}
+                onChange={(next) => tagsMut.mutateAsync(next).then(() => undefined)}
+              />
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-3 gap-3 text-right">
           <Stat label="Total"  value={run.totalSteps}  />

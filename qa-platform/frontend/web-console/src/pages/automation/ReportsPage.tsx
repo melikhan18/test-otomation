@@ -21,7 +21,9 @@ import {
 } from "@/lib/automation";
 import {
   distinctTags, matchesTagFilter, useReportFeed, type ReportItem,
+  platformSupportsRunTagsAndCancel,
 } from "@/lib/reports";
+import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/cn";
 
 /**
@@ -164,12 +166,14 @@ export default function ReportsPage() {
 /* ─────────────────────────────  Rows  ──────────────────────────────── */
 
 function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: string[] }) {
+  const platform = useAuthStore((s) => s.activePlatform);
+  const supportsTagsCancel = platformSupportsRunTagsAndCancel(platform);
   const qc = useQueryClient();
   const mut = useMutation({
     mutationFn: (tags: string[]) => suiteRunApi.updateTags(sr.id, tags),
     onSuccess: () => {
       // Refresh the feed so the new tag appears in the filter bar and on neighbours.
-      qc.invalidateQueries({ queryKey: ["automation-suite-runs"] });
+      qc.invalidateQueries({ queryKey: ["report-suite-runs"] });
       qc.invalidateQueries({ queryKey: ["automation-suite-run-detail", sr.id] });
     },
   });
@@ -179,7 +183,7 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
       toast.success(`Stop requested for suite #${sr.id}`, {
         description: "Partial recording will be preserved.",
       });
-      qc.invalidateQueries({ queryKey: ["automation-suite-runs"] });
+      qc.invalidateQueries({ queryKey: ["report-suite-runs"] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't stop the suite"),
   });
@@ -215,7 +219,9 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
             </span>
           </div>
           <div className="text-[11px] text-ink-muted flex items-center gap-2.5 mt-0.5 flex-wrap">
-            <span>Device #{sr.deviceId ?? "?"}</span>
+            {platform === "WEB"
+              ? <span>browser run</span>
+              : <span>Device #{sr.deviceId ?? "?"}</span>}
             <span>env <code className="font-mono">{sr.environment}</code></span>
             <span>{new Date(sr.createdAt).toLocaleString()}</span>
             {sr.durationMs != null && (
@@ -224,14 +230,16 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
               </span>
             )}
           </div>
-          <div className="mt-1.5" onClick={(e) => e.preventDefault()}>
-            <TagEditor
-              tags={sr.tags ?? []}
-              suggestions={suggestions}
-              size="sm"
-              onChange={(next) => mut.mutateAsync(next).then(() => undefined)}
-            />
-          </div>
+          {supportsTagsCancel && (
+            <div className="mt-1.5" onClick={(e) => e.preventDefault()}>
+              <TagEditor
+                tags={sr.tags ?? []}
+                suggestions={suggestions}
+                size="sm"
+                onChange={(next) => mut.mutateAsync(next).then(() => undefined)}
+              />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="hidden sm:flex flex-col items-end">
@@ -248,7 +256,7 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
           </div>
           {isLive && <LiveIndicator variant="bars" tone={liveTone} />}
           <StatusBadge tone={tone}>{sr.status}</StatusBadge>
-          {isLive && (
+          {isLive && supportsTagsCancel && (
             <StopButton
               busy={cancelMut.isPending}
               label={`Stop suite #${sr.id}?`}
@@ -264,11 +272,13 @@ function SuiteRow({ sr, suggestions }: { sr: SuiteRunSummary; suggestions: strin
 }
 
 function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }) {
+  const platform = useAuthStore((s) => s.activePlatform);
+  const supportsTagsCancel = platformSupportsRunTagsAndCancel(platform);
   const qc = useQueryClient();
   const mut = useMutation({
     mutationFn: (tags: string[]) => runApi.updateTags(run.id, tags),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["automation-runs"] });
+      qc.invalidateQueries({ queryKey: ["report-runs"] });
       qc.invalidateQueries({ queryKey: ["automation-run", run.id] });
     },
   });
@@ -278,7 +288,7 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
       toast.success(`Stop requested for run #${run.id}`, {
         description: "Partial recording will be preserved.",
       });
-      qc.invalidateQueries({ queryKey: ["automation-runs"] });
+      qc.invalidateQueries({ queryKey: ["report-runs"] });
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail ?? "Couldn't stop the run"),
   });
@@ -316,7 +326,9 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
             )}
           </div>
           <div className="text-[11px] text-ink-muted flex items-center gap-2.5 mt-0.5 flex-wrap">
-            <span>Device #{run.deviceId ?? "?"}</span>
+            {platform === "WEB"
+              ? <span>browser run</span>
+              : <span>Device #{run.deviceId ?? "?"}</span>}
             <span>env <code className="font-mono">{run.environment}</code></span>
             <span>{new Date(run.createdAt).toLocaleString()}</span>
             {run.durationMs != null && (
@@ -325,14 +337,16 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
               </span>
             )}
           </div>
-          <div className="mt-1.5" onClick={(e) => e.preventDefault()}>
-            <TagEditor
-              tags={run.tags ?? []}
-              suggestions={suggestions}
-              size="sm"
-              onChange={(next) => mut.mutateAsync(next).then(() => undefined)}
-            />
-          </div>
+          {supportsTagsCancel && (
+            <div className="mt-1.5" onClick={(e) => e.preventDefault()}>
+              <TagEditor
+                tags={run.tags ?? []}
+                suggestions={suggestions}
+                size="sm"
+                onChange={(next) => mut.mutateAsync(next).then(() => undefined)}
+              />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="hidden sm:flex flex-col items-end">
@@ -349,7 +363,7 @@ function RunRow({ run, suggestions }: { run: RunSummary; suggestions: string[] }
           </div>
           {isLive && <LiveIndicator variant="bars" tone={liveTone} />}
           <StatusBadge tone={tone}>{run.status}</StatusBadge>
-          {isLive && (
+          {isLive && supportsTagsCancel && (
             <StopButton
               busy={cancelMut.isPending}
               label={`Stop run #${run.id}?`}
