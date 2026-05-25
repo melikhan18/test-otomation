@@ -1,5 +1,7 @@
 package com.qaplatform.android.automation.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qaplatform.android.automation.api.dto.RunDtos;
 import com.qaplatform.android.automation.domain.*;
 import com.qaplatform.android.automation.service.run.RunOrchestrator;
@@ -12,9 +14,12 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class RunService {
@@ -22,22 +27,28 @@ public class RunService {
     private final RunRepository runs;
     private final StepResultRepository stepResults;
     private final ScenarioRepository scenarios;
+    private final StepRepository steps;
     private final AppRepository apps;
     private final AppVersionRepository appVersions;
     private final RunOrchestrator orchestrator;
     private final com.qaplatform.android.automation.service.run.RunCancellationRegistry cancels;
+    private final ObjectMapper json;
 
     public RunService(RunRepository runs, StepResultRepository stepResults,
                       ScenarioRepository scenarios,
+                      StepRepository steps,
                       AppRepository apps, AppVersionRepository appVersions,
                       RunOrchestrator orchestrator,
-                      com.qaplatform.android.automation.service.run.RunCancellationRegistry cancels) {
+                      com.qaplatform.android.automation.service.run.RunCancellationRegistry cancels,
+                      ObjectMapper json) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
+        this.steps = steps;
         this.apps = apps;
         this.appVersions = appVersions;
         this.orchestrator = orchestrator;
+        this.json = json;
         this.cancels = cancels;
     }
 
@@ -181,13 +192,37 @@ public class RunService {
     }
 
     private RunDtos.View toView(RunEntity r, ScenarioEntity sc) {
-        var rows = stepResults.findAllByRunIdOrderByOrderIndexAsc(r.getId()).stream()
-                .map(s -> new RunDtos.StepResultView(
-                        s.getId(), s.getStepId(), s.getOrderIndex(), s.getAction(), s.getStatus(),
-                        s.getStartedAt(), s.getFinishedAt(), s.getDurationMs(),
-                        s.getErrorMessage(), s.getScreenshotUrl(), s.getResolvedLocator(), s.getRetriesUsed()
-                ))
-                .toList();
+        var results = stepResults.findAllByRunIdOrderByOrderIndexAsc(r.getId());
+
+        // Batch-fetch underlying StepEntity rows so each result can carry
+        // tree metadata (parent_step_id, branch_label, condition). Without
+        // this the run detail UI can't group IF children under their parent.
+        List<Long> stepIds = results.stream()
+                .map(StepResultEntity::getStepId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        Map<Long, StepEntity> stepById = new HashMap<>();
+        if (!stepIds.isEmpty()) {
+            steps.findAllById(stepIds).forEach(s -> stepById.put(s.getId(), s));
+        }
+
+        List<RunDtos.StepResultView> rows = new ArrayList<>(results.size());
+        for (var s : results) {
+            StepEntity step = s.getStepId() != null ? stepById.get(s.getStepId()) : null;
+            Long parentStepId = step != null ? step.getParentStepId() : null;
+            String branchLabel = step != null ? step.getBranchLabel() : null;
+            StepCondition cond = null;
+            if (step != null && step.getConditionJson() != null && !step.getConditionJson().isBlank()) {
+                try { cond = json.readValue(step.getConditionJson(), StepCondition.class); }
+                catch (JsonProcessingException ignore) { /* UI handles null */ }
+            }
+            rows.add(new RunDtos.StepResultView(
+                    s.getId(), s.getStepId(), s.getOrderIndex(), s.getAction(), s.getStatus(),
+                    s.getStartedAt(), s.getFinishedAt(), s.getDurationMs(),
+                    s.getErrorMessage(), s.getScreenshotUrl(), s.getResolvedLocator(), s.getRetriesUsed(),
+                    parentStepId, branchLabel, cond
+            ));
+        }
         return new RunDtos.View(
                 r.getId(), r.getScenarioId(),
                 sc != null ? sc.getName() : null,

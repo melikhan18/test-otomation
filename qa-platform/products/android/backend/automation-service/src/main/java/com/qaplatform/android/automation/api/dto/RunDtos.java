@@ -111,6 +111,13 @@ public class RunDtos {
             String errorMessage,
             String screenshotUrl,
             String resolvedLocator,
-            int retriesUsed
+            int retriesUsed,
+            /** Tree metadata mirrored from the underlying StepEntity (V15+).
+             *  Both null = root level (legacy flat scenario). Both set =
+             *  the step lived inside an IF block. */
+            Long parentStepId,
+            String branchLabel,
+            /** Predicate snapshot — only present when action == IF. */
+            com.qaplatform.android.automation.domain.StepCondition condition
     ) {}
 }

@@ -76,6 +76,7 @@ public class RunOrchestrator {
     private final com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup;
     private final ReportsPublisher reportsPublisher;
     private final AndroidStepExecutor stepExecutorFactory;
+    private final com.fasterxml.jackson.databind.ObjectMapper json;
 
     public RunOrchestrator(RunRepository runs, StepResultRepository stepResults,
                            ScenarioRepository scenarios, StepRepository steps,
@@ -86,7 +87,8 @@ public class RunOrchestrator {
                            RunCancellationRegistry cancels,
                            com.qaplatform.android.automation.tenancy.ProjectLookup projectLookup,
                            ReportsPublisher reportsPublisher,
-                           AndroidStepExecutor stepExecutorFactory) {
+                           AndroidStepExecutor stepExecutorFactory,
+                           com.fasterxml.jackson.databind.ObjectMapper json) {
         this.runs = runs;
         this.stepResults = stepResults;
         this.scenarios = scenarios;
@@ -102,6 +104,7 @@ public class RunOrchestrator {
         this.cancels = cancels;
         this.reportsPublisher = reportsPublisher;
         this.stepExecutorFactory = stepExecutorFactory;
+        this.json = json;
     }
 
     public void submit(long runId, String userJwt) {
@@ -213,67 +216,38 @@ public class RunOrchestrator {
                     }
                 }
             }
-            for (int i = 0; !prepFailed && i < plan.size(); i++) {
-                // Cooperative cancel checkpoint — before kicking off the step. If the
-                // user pressed Stop while we were sleeping between steps (or running
-                // the previous step) we exit the loop cleanly here. The finally block
-                // still uploads the partial recording and marks the run CANCELLED.
-                if (cancels.isCancelled(runId)) {
-                    cancelled = true;
-                    log.info("run {} cancel requested — stopping at step {}", runId, i);
-                    break;
+            if (!prepFailed) {
+                // Map result rows by stepId so the tree walker can pull the
+                // right placeholder regardless of execution order. (The flat
+                // placeholder list is ordered by orderIndex globally, which
+                // doesn't reflect tree shape — IF + both branches share
+                // overlapping orderIndex values inside their respective
+                // scopes.)
+                java.util.Map<Long, StepResultEntity> resultByStepId = new java.util.HashMap<>();
+                for (StepResultEntity p : placeholders) {
+                    if (p.getStepId() != null) resultByStepId.put(p.getStepId(), p);
                 }
 
-                StepEntity step = plan.get(i);
-                StepResultEntity row = placeholders.get(i);
+                // Per-run condition evaluator — reuses the same bridge +
+                // session token + element catalog as StepRunner.
+                AndroidConditionEvaluator conditionEvaluator = new AndroidConditionEvaluator(
+                        bridge, elements, testData, json,
+                        reservation.sessionId(), reservation.sessionToken(),
+                        run.getEnvironment());
 
-                row.setStatus(StepResultStatus.RUNNING);
-                row.setStartedAt(Instant.now());
-                stepResults.save(row);
+                List<StepEntity> rootSteps = steps.findRootStepsByScenarioId(scenario.getId());
+                ExecBlockResult br = executeBlock(rootSteps, resultByStepId, executor, stepContext,
+                        conditionEvaluator, reservation, runId, interStepDelay, adaptive);
+                anyFailure |= br.failure;
+                cancelled  |= br.cancelled;
 
-                // F6 dispatch — through the StepExecutor SPI, not the runner directly.
-                // The outcome is the platform-agnostic StepOutcome record; durationMs
-                // is measured here since StepOutcome doesn't carry it (the orchestrator
-                // already knows the wall clock).
-                long stepStartedAtMs = System.currentTimeMillis();
-                StepOutcome outcome = executor.execute(StepEntityRunStep.of(step), stepContext);
-                int durationMs = (int) (System.currentTimeMillis() - stepStartedAtMs);
-
-                row.setStatus(outcome.status());
-                row.setFinishedAt(Instant.now());
-                row.setDurationMs(durationMs);
-                row.setErrorMessage(outcome.errorMessage());
-                row.setResolvedLocator(outcome.resolvedLocator());
-
-                // Capture a still-frame the moment a step fails — gives the report a "what
-                // did the screen look like" anchor without paying the screenshot cost on
-                // every PASSED step. Best-effort: any error here is logged and ignored.
-                if (outcome.status() == StepResultStatus.FAILED || outcome.status() == StepResultStatus.ERROR) {
-                    String url = captureScreenshot(reservation.sessionId(), reservation.sessionToken(), runId, row.getId());
-                    if (url != null) row.setScreenshotUrl(url);
-                }
-                stepResults.save(row);
-
-                if (outcome.status() != StepResultStatus.PASSED) {
-                    anyFailure = true;
-                    // Mark remaining steps as SKIPPED so the report is accurate.
-                    for (int j = i + 1; j < placeholders.size(); j++) {
-                        StepResultEntity skip = placeholders.get(j);
-                        skip.setStatus(StepResultStatus.SKIPPED);
-                        stepResults.save(skip);
-                    }
-                    break;
-                }
-
-                // Pacing: let the UI settle (animations, network) before the next locator resolve.
-                // Skipped after the last step since there's nothing to wait for.
-                if (i < plan.size() - 1) {
-                    if (adaptive && changesUi(step.getAction())) {
-                        if (waitForStable(reservation.sessionId(), reservation.sessionToken(), runId)) {
-                            cancelled = true; break;
-                        }
-                    } else if (!adaptive && interStepDelay > 0) {
-                        if (sleepCancellable(interStepDelay, runId)) { cancelled = true; break; }
+                // Any placeholder still PENDING after the walk was inside a
+                // branch the IF didn't pick (or the walk stopped before it
+                // would have run). Mark SKIPPED so report counts add up.
+                for (StepResultEntity p : placeholders) {
+                    if (p.getStatus() == StepResultStatus.PENDING) {
+                        p.setStatus(StepResultStatus.SKIPPED);
+                        stepResults.save(p);
                     }
                 }
             }
@@ -321,6 +295,124 @@ public class RunOrchestrator {
      *   <tr><td>installed, vc &gt; target</td><td>any</td><td>ALREADY_LATEST (no downgrade)</td></tr>
      * </table>
      */
+    /* ────────────────────────  Tree walker  ──────────────────────────── */
+
+    /** Outcome of executing one block — used to bubble failure / cancel up
+     *  through the recursive IF branches without unwinding via exceptions.
+     *  No static factories: their names (cancelled/failed) would collide
+     *  with the auto-generated record accessors. */
+    private record ExecBlockResult(boolean failure, boolean cancelled) {}
+
+    private static final ExecBlockResult BLOCK_OK        = new ExecBlockResult(false, false);
+    private static final ExecBlockResult BLOCK_FAILED    = new ExecBlockResult(true,  false);
+    private static final ExecBlockResult BLOCK_CANCELLED = new ExecBlockResult(false, true);
+
+    /**
+     * Executes a block of steps (root scenario or one branch of an IF) in
+     * order. Leaf steps go through the F6 StepExecutor SPI (preserves
+     * cancellation, screenshots-on-failure, adaptive wait, inter-step
+     * pacing). IF rows pull the predicate's outcome from the condition
+     * evaluator, mark the IF row PASSED/ERROR, and recurse into the chosen
+     * branch — the un-chosen branch's children stay PENDING and get
+     * swept to SKIPPED after the whole walk finishes.
+     *
+     * <p>Returns the first non-ok outcome it sees (failure or cancel);
+     * the caller stops processing further siblings.</p>
+     */
+    private ExecBlockResult executeBlock(List<StepEntity> block,
+                                         java.util.Map<Long, StepResultEntity> resultByStepId,
+                                         StepExecutor executor,
+                                         StepContext stepContext,
+                                         AndroidConditionEvaluator conditionEvaluator,
+                                         SessionClient.Reservation reservation,
+                                         long runId,
+                                         int interStepDelay,
+                                         boolean adaptive) {
+        for (int idx = 0; idx < block.size(); idx++) {
+            if (cancels.isCancelled(runId)) {
+                log.info("run {} cancel requested — stopping in branch at index {}", runId, idx);
+                return BLOCK_CANCELLED;
+            }
+
+            StepEntity step = block.get(idx);
+            StepResultEntity row = resultByStepId.get(step.getId());
+            if (row == null) {
+                // Defensive: every step was pre-populated. If we hit this it's
+                // a bug — log + skip rather than crash the run.
+                log.warn("run {} step {} has no result row, skipping", runId, step.getId());
+                continue;
+            }
+
+            if (step.getAction() == StepAction.IF) {
+                long start = System.currentTimeMillis();
+                row.setStatus(StepResultStatus.RUNNING);
+                row.setStartedAt(Instant.now());
+                stepResults.save(row);
+                boolean condResult;
+                try {
+                    condResult = conditionEvaluator.evaluate(step.getConditionJson());
+                } catch (Exception e) {
+                    log.warn("run {} IF step {} evaluation failed: {}", runId, step.getId(), e.getMessage());
+                    row.setStatus(StepResultStatus.ERROR);
+                    row.setErrorMessage("IF condition: " + e.getMessage());
+                    row.setFinishedAt(Instant.now());
+                    row.setDurationMs((int) (System.currentTimeMillis() - start));
+                    stepResults.save(row);
+                    return BLOCK_FAILED;
+                }
+                row.setStatus(StepResultStatus.PASSED);
+                row.setFinishedAt(Instant.now());
+                row.setDurationMs((int) (System.currentTimeMillis() - start));
+                stepResults.save(row);
+
+                String pickedBranch = condResult ? "then" : "else";
+                List<StepEntity> branchKids = steps.findAllByParentStepIdAndBranchLabelOrderByOrderIndexAsc(
+                        step.getId(), pickedBranch);
+                ExecBlockResult inner = executeBlock(branchKids, resultByStepId, executor, stepContext,
+                        conditionEvaluator, reservation, runId, interStepDelay, adaptive);
+                if (inner.failure || inner.cancelled) return inner;
+                continue;
+            }
+
+            // ── Regular leaf step — same lifecycle as the old flat loop ──
+            row.setStatus(StepResultStatus.RUNNING);
+            row.setStartedAt(Instant.now());
+            stepResults.save(row);
+
+            long stepStartedAtMs = System.currentTimeMillis();
+            StepOutcome outcome = executor.execute(StepEntityRunStep.of(step), stepContext);
+            int durationMs = (int) (System.currentTimeMillis() - stepStartedAtMs);
+
+            row.setStatus(outcome.status());
+            row.setFinishedAt(Instant.now());
+            row.setDurationMs(durationMs);
+            row.setErrorMessage(outcome.errorMessage());
+            row.setResolvedLocator(outcome.resolvedLocator());
+
+            if (outcome.status() == StepResultStatus.FAILED || outcome.status() == StepResultStatus.ERROR) {
+                String url = captureScreenshot(reservation.sessionId(), reservation.sessionToken(), runId, row.getId());
+                if (url != null) row.setScreenshotUrl(url);
+            }
+            stepResults.save(row);
+
+            if (outcome.status() != StepResultStatus.PASSED) {
+                return BLOCK_FAILED;
+            }
+
+            // Inter-step pacing (skip after last sibling — nothing to wait for).
+            if (idx < block.size() - 1) {
+                if (adaptive && changesUi(step.getAction())) {
+                    if (waitForStable(reservation.sessionId(), reservation.sessionToken(), runId)) {
+                        return BLOCK_CANCELLED;
+                    }
+                } else if (!adaptive && interStepDelay > 0) {
+                    if (sleepCancellable(interStepDelay, runId)) return BLOCK_CANCELLED;
+                }
+            }
+        }
+        return BLOCK_OK;
+    }
+
     private AppPrepResult runAppPrep(RunEntity run, SessionClient.Reservation reservation) {
         if (run.getTargetAppVersionId() == null) {
             return AppPrepResult.notRequested();
