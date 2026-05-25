@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Sweeps ACTIVE sessions in two ways:
@@ -63,6 +65,38 @@ public class OrphanedSessionReaper {
                 locks.release(s.getDeviceId(), s.getId());
                 log.warn("auto-ended stale session {} on device {} — exceeded max age {} (orchestrator likely leaked it)",
                         s.getId(), s.getDeviceId(), MAX_SESSION_AGE);
+            }
+        }
+
+        // Reverse sweep: walk the Redis lock keys directly and free any whose
+        // session row is NOT in ACTIVE state (or no longer exists). Catches:
+        //   • DB rows manually tampered with (operator ran UPDATE ... ENDED)
+        //   • Race where the release Lua script returned 0 but somehow the
+        //     keys weren't deleted
+        //   • Any other path that ended the DB row without going through
+        //     SessionLockService.release(...)
+        // Without this, the device-service sees device:lock:N + device:session:N
+        // and keeps reporting IN_USE indefinitely even though the session is gone.
+        Set<String> lockKeys = redis.keys("device:lock:*");
+        if (lockKeys != null) {
+            for (String key : lockKeys) {
+                long deviceId;
+                try { deviceId = Long.parseLong(key.substring("device:lock:".length())); }
+                catch (NumberFormatException nfe) { continue; }
+
+                String sessionIdStr = redis.opsForValue().get(key);
+                if (sessionIdStr == null) continue;  // expired between keys() and get()
+                long sessionId;
+                try { sessionId = Long.parseLong(sessionIdStr); }
+                catch (NumberFormatException nfe) { continue; }
+
+                Optional<Session> sOpt = sessions.findById(sessionId);
+                boolean stillActive = sOpt.isPresent() && "ACTIVE".equals(sOpt.get().getStatus());
+                if (!stillActive) {
+                    locks.release(deviceId, sessionId);
+                    log.warn("auto-released stale Redis lock on device {} (session {} no longer ACTIVE in DB)",
+                            deviceId, sessionId);
+                }
             }
         }
     }
