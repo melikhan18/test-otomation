@@ -85,7 +85,9 @@ if swapon --show 2>/dev/null | grep -q '/swapfile'; then
 else
     fallocate -l "$SWAP_SIZE" /swapfile
     chmod 600 /swapfile
-    mkswap -q /swapfile >/dev/null
+    # `mkswap -q` is only on newer util-linux; older Ubuntu 22.04 ships
+    # without it. Just suppress stdout instead.
+    mkswap /swapfile >/dev/null
     swapon /swapfile
     grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
     G "${SWAP_SIZE} swapfile created and enabled"
