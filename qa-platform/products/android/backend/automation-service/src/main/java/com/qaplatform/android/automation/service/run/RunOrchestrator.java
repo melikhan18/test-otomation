@@ -106,10 +106,14 @@ public class RunOrchestrator {
 
     public void submit(long runId, String userJwt) {
         pool.submit(() -> {
-            try { execute(runId, userJwt); }
-            catch (Throwable t) {
-                log.error("run {} crashed", runId, t);
-                fail(runId, "orchestrator crash: " + t.getMessage());
+            // Bind runId to MDC so every log line in this thread carries it
+            // as a structured field (see :common's logback-spring.xml).
+            try (org.slf4j.MDC.MDCCloseable rc = org.slf4j.MDC.putCloseable("runId", String.valueOf(runId))) {
+                try { execute(runId, userJwt); }
+                catch (Throwable t) {
+                    log.error("run {} crashed", runId, t);
+                    fail(runId, "orchestrator crash: " + t.getMessage());
+                }
             }
         });
     }

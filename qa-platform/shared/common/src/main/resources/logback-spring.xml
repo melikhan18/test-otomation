@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared Logback configuration for every QA Platform Spring Boot service.
+
+  Lives in :common's classpath; any service that depends on :common
+  (i.e., all of them) picks this up automatically because Spring Boot
+  scans the classpath for `logback-spring.xml`.
+
+  Format: structured JSON to stdout. Each line is a self-contained
+  record with timestamp, level, logger, message, thread, MDC fields
+  and (on exceptions) a full stack trace. This is the contract that
+  Loki/Promtail expects — every field is queryable in LogQL as
+  `| json | runId="15"` without regex.
+
+  Override per-service log levels via application.yml's
+  `logging.level.*` (no Logback edit required); this file only owns
+  the encoder + appender shape.
+-->
+<configuration>
+
+    <!-- Pull the service name straight from Spring's environment so every
+         log line is self-identifying. Promtail then doesn't need to guess
+         which container produced what. -->
+    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="unknown-service"/>
+    <springProperty scope="context" name="appEnv"  source="app.environment"          defaultValue="dev"/>
+
+    <!-- JSON appender on stdout. Logstash encoder produces one JSON object
+         per line, which both Promtail and `docker logs` handle cleanly. -->
+    <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- ISO-8601 with millis + Z; @timestamp is the conventional key
+                 most aggregators auto-recognise. -->
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSSXXX</timestampPattern>
+            <timeZone>UTC</timeZone>
+
+            <!-- Static fields baked into every log line. Lets a single
+                 Grafana query filter to one service / one env without
+                 relying on container metadata. -->
+            <customFields>{"service":"${appName}","env":"${appEnv}"}</customFields>
+
+            <!-- Don't repeat the appName in the message — we already have
+                 `service` as a field. Keeps lines short. -->
+            <includeContext>false</includeContext>
+
+            <!-- Cap stack trace depth + length so a recursive crash doesn't
+                 produce 10 MB log lines that Loki then rejects. -->
+            <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                <maxDepthPerThrowable>30</maxDepthPerThrowable>
+                <maxLength>4096</maxLength>
+                <shortenedClassNameLength>40</shortenedClassNameLength>
+                <rootCauseFirst>true</rootCauseFirst>
+            </throwableConverter>
+
+            <!-- Stuff MDC fields (runId, suiteRunId, userId, requestId, ...)
+                 into the JSON root so they're directly queryable. -->
+            <includeMdcKeyName>runId</includeMdcKeyName>
+            <includeMdcKeyName>suiteRunId</includeMdcKeyName>
+            <includeMdcKeyName>scenarioId</includeMdcKeyName>
+            <includeMdcKeyName>projectId</includeMdcKeyName>
+            <includeMdcKeyName>companyId</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <includeMdcKeyName>requestId</includeMdcKeyName>
+            <includeMdcKeyName>sessionId</includeMdcKeyName>
+            <includeMdcKeyName>deviceId</includeMdcKeyName>
+        </encoder>
+    </appender>
+
+    <!-- Library spam: dial back to WARN so HikariCP / Tomcat / Hibernate
+         startup chatter doesn't drown out application logs. Per-service
+         overrides in application.yml still win. -->
+    <logger name="org.hibernate"                       level="WARN"/>
+    <logger name="org.springframework"                 level="INFO"/>
+    <logger name="com.zaxxer.hikari"                   level="WARN"/>
+    <logger name="org.apache.tomcat"                   level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="JSON"/>
+    </root>
+</configuration>

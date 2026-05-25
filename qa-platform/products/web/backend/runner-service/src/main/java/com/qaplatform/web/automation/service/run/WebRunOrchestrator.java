@@ -125,10 +125,16 @@ public class WebRunOrchestrator {
 
     public void submit(long runId) {
         pool.submit(() -> {
-            try { execute(runId); }
-            catch (Throwable t) {
-                log.error("web run {} crashed", runId, t);
-                fail(runId, "orchestrator crash: " + t.getMessage());
+            // Bind runId to the SLF4J MDC for the lifetime of this run so
+            // every log line emitted by execute() (and anything it calls)
+            // carries it as a structured field. Loki can then filter on
+            // `| json | runId="N"` instead of regex-scanning the message.
+            try (org.slf4j.MDC.MDCCloseable rc = org.slf4j.MDC.putCloseable("runId", String.valueOf(runId))) {
+                try { execute(runId); }
+                catch (Throwable t) {
+                    log.error("web run {} crashed", runId, t);
+                    fail(runId, "orchestrator crash: " + t.getMessage());
+                }
             }
         });
     }

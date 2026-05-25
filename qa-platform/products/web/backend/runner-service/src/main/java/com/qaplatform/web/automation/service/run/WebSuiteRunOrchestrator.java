@@ -73,10 +73,15 @@ public class WebSuiteRunOrchestrator {
 
     public void submit(long suiteRunId) {
         pool.submit(() -> {
-            try { execute(suiteRunId); }
-            catch (Throwable t) {
-                log.error("web suite run {} crashed", suiteRunId, t);
-                fail(suiteRunId, "orchestrator crash: " + t.getMessage());
+            // Bind suiteRunId to MDC so the parent suite logs and any logs
+            // from the child runs invoked through runOrchestrator.submit()
+            // can be correlated in Loki.
+            try (org.slf4j.MDC.MDCCloseable rc = org.slf4j.MDC.putCloseable("suiteRunId", String.valueOf(suiteRunId))) {
+                try { execute(suiteRunId); }
+                catch (Throwable t) {
+                    log.error("web suite run {} crashed", suiteRunId, t);
+                    fail(suiteRunId, "orchestrator crash: " + t.getMessage());
+                }
             }
         });
     }
