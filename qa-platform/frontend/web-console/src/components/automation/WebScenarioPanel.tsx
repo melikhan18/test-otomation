@@ -1048,30 +1048,23 @@ function IfStepCard({
 
       {!collapsed && (
         <div className="mt-3 space-y-3">
-          {/* THEN lane */}
+          {/* THEN lane — always render StepListSection. With empty
+              children it shows just the bottom "Add step" pill (and
+              opens the NewStepCard inline on click). */}
           <div className="pl-3 border-l-2 border-l-success-500/40">
             <div className="text-[10px] uppercase tracking-wider font-semibold text-success-500 mb-2">Then</div>
-            {thenChildren.length === 0 ? (
-              <button
-                onClick={() => setAddingAt({ parentId: step.id, branch: "then", position: 0 })}
-                className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-success-500/30 text-ink-secondary hover:text-ink-primary hover:border-success-500/50 hover:bg-success-500/5 transition-colors text-xs"
-              >
-                <Plus size={12} /> Add step to THEN branch
-              </button>
-            ) : (
-              <StepListSection
-                steps={thenChildren}
-                parentId={step.id}
-                branch="then"
-                addingAt={addingAt}
-                setAddingAt={setAddingAt}
-                editingStepId={editingStepId}
-                setEditingStepId={setEditingStepId}
-                addStep={addStep}
-                updateStep={updateStep}
-                deleteStep={deleteStep}
-              />
-            )}
+            <StepListSection
+              steps={thenChildren}
+              parentId={step.id}
+              branch="then"
+              addingAt={addingAt}
+              setAddingAt={setAddingAt}
+              editingStepId={editingStepId}
+              setEditingStepId={setEditingStepId}
+              addStep={addStep}
+              updateStep={updateStep}
+              deleteStep={deleteStep}
+            />
           </div>
 
           {/* ELSE lane — only shown if it has children OR the user is adding
