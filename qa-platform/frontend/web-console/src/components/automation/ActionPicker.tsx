@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowLeftRight, ArrowRight, Ban, Camera, CheckSquare, CircleDot, CircleSlash,
-  Clock, Code2, Equal, Eraser, Eye, EyeOff, Globe, Hand, Hash, Heading1, Hourglass, Keyboard,
+  Clock, Code2, Equal, Eraser, Eye, EyeOff, GitBranch, Globe, Hand, Hash, Heading1, Hourglass, Keyboard,
   KeyRound, Link, ListChecks, Loader, MessageSquare, MousePointer2, MousePointerClick,
   Regex, RotateCw, Search, Square, Target, TextSearch, ToggleRight, X,
   type LucideIcon,
@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
  */
 const ICONS: Record<string, LucideIcon> = {
   ArrowLeft, ArrowLeftRight, ArrowRight, Ban, Camera, CheckSquare, CircleDot, CircleSlash,
-  Clock, Code2, Equal, Eraser, Eye, EyeOff, Globe, Hand, Hash, Heading1, Hourglass, Keyboard,
+  Clock, Code2, Equal, Eraser, Eye, EyeOff, GitBranch, Globe, Hand, Hash, Heading1, Hourglass, Keyboard,
   KeyRound, Link, ListChecks, Loader, MessageSquare, MousePointer2, MousePointerClick,
   Regex, RotateCw, Square, Target, TextSearch, ToggleRight,
 };

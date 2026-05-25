@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
-  FileCheck2, History, Pencil, Play, Plus, Trash2, X,
+  ChevronDown, ChevronRight, FileCheck2, GitBranch, History, Pencil, Play, Plus, Trash2, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,7 +14,7 @@ import {
   browserApi, webElementApi, webRunApi, webScenarioApi, webTestDataApi,
   WEB_STEP_ACTIONS, WEB_STEP_ACTION_MAP,
   type BrowserProfile, type WebElementView, type WebScenarioUpdate,
-  type WebStepAction, type WebStepCreate, type WebStepUpdate, type WebStepView, type WebTestDataView,
+  type WebStepAction, type WebStepCondition, type WebStepCreate, type WebStepUpdate, type WebStepView, type WebTestDataView,
 } from "@/lib/webAutomation";
 
 /** One-click quick picks above the popover — cover the bulk of typical
@@ -23,8 +23,22 @@ const WEB_QUICK_PICKS: WebStepAction[] = [
   "GOTO", "CLICK", "FILL", "WAIT_FOR_SELECTOR", "ASSERT_VISIBLE", "ASSERT_TEXT_CONTAINS",
 ];
 
+/** Identifies WHERE in the step tree the user is about to insert a new
+ *  step. `parentId` + `branch` both null = root level (legacy/flat
+ *  scenarios). Both set = inside an IF's then/else lane. */
+type InsertSlot = {
+  parentId: number | null;
+  branch: "then" | "else" | null;
+  position: number;
+};
+
+function sameSlot(a: InsertSlot | null, b: { parentId: number | null; branch: "then" | "else" | null; position: number }): boolean {
+  return a != null && a.parentId === b.parentId && a.branch === b.branch && a.position === b.position;
+}
+
 function humaniseWebCategory(key: string): string {
   switch (key) {
+    case "control":     return "Control flow";
     case "navigation":  return "Navigation";
     case "interaction": return "Interaction";
     case "wait":        return "Wait";
@@ -88,11 +102,11 @@ export default function WebScenarioPanel({ scenarioId, onAfterDelete, onMutated 
     },
   });
 
-  // addingAt holds the 0-based insert index when the user has opened a "new
-  // step" editor — null means no editor is open. Insertion at index N pushes
-  // every step previously at order≥N one slot down, so any value from 0 to
-  // steps.length is a valid drop point.
-  const [addingAt, setAddingAt] = useState<number | null>(null);
+  // Scope-aware insert slot. Tracks WHICH branch the user is currently
+  // inserting into and at WHAT position within that branch.
+  //  parentId / branch null = root level (legacy/flat scenario behaviour).
+  //  parentId / branch set  = inside an IF's "then" or "else" lane.
+  const [addingAt, setAddingAt] = useState<InsertSlot | null>(null);
   const [editingStepId, setEditingStepId] = useState<number | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -158,7 +172,7 @@ export default function WebScenarioPanel({ scenarioId, onAfterDelete, onMutated 
         </div>
       </Card>
 
-      {/* ── Steps ────────────────────────────────────────────────────── */}
+      {/* ── Steps (tree-aware) ───────────────────────────────────────── */}
       {steps.length === 0 && addingAt == null ? (
         <Card>
           <EmptyState
@@ -166,86 +180,26 @@ export default function WebScenarioPanel({ scenarioId, onAfterDelete, onMutated 
             title="No steps yet"
             description="Add the first step. You can pick an element from the repository and a value from test data."
             action={
-              <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setAddingAt(0)}>
+              <Button variant="primary" size="sm" leftIcon={<Plus size={14} />}
+                      onClick={() => setAddingAt({ parentId: null, branch: null, position: 0 })}>
                 Add step
               </Button>
             }
           />
         </Card>
       ) : (
-        <div className="space-y-2">
-          {/* Prepend affordance — present once there's at least one step. */}
-          {steps.length > 0 && (
-            <InsertHereLine
-              active={addingAt === 0}
-              onClick={() => setAddingAt(0)}
-            />
-          )}
-          {addingAt === 0 && (
-            <NewStepCard
-              busy={addStep.isPending}
-              onCancel={() => setAddingAt(null)}
-              onSubmit={(b) => addStep.mutate(
-                { ...(b as WebStepCreate), position: 0 },
-                { onSuccess: () => setAddingAt(null) },
-              )}
-            />
-          )}
-          {steps.map((step, idx) => (
-            <Fragment key={step.id}>
-              <StepRow
-                step={step}
-                isEditing={editingStepId === step.id}
-                onEdit={() => setEditingStepId(step.id)}
-                onCancelEdit={() => setEditingStepId(null)}
-                onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
-                onSubmitEdit={(b) => updateStep.mutate(
-                  { stepId: step.id, b: b as WebStepUpdate },
-                  { onSuccess: () => setEditingStepId(null) },
-                )}
-                busy={updateStep.isPending}
-              />
-              {/* Insert-here line between step idx and idx+1 — last step uses
-                  the always-visible "Add step" pill below instead. */}
-              {idx < steps.length - 1 && (
-                <InsertHereLine
-                  active={addingAt === idx + 1}
-                  onClick={() => setAddingAt(idx + 1)}
-                />
-              )}
-              {addingAt === idx + 1 && idx < steps.length - 1 && (
-                <NewStepCard
-                  busy={addStep.isPending}
-                  onCancel={() => setAddingAt(null)}
-                  onSubmit={(b) => addStep.mutate(
-                    { ...(b as WebStepCreate), position: idx + 1 },
-                    { onSuccess: () => setAddingAt(null) },
-                  )}
-                />
-              )}
-            </Fragment>
-          ))}
-
-          {/* Always-visible "Add step" pill at the bottom. Appends when
-              activated (position omitted = end of list). */}
-          {addingAt === steps.length ? (
-            <NewStepCard
-              busy={addStep.isPending}
-              onCancel={() => setAddingAt(null)}
-              onSubmit={(b) => addStep.mutate(
-                b as WebStepCreate,
-                { onSuccess: () => setAddingAt(null) },
-              )}
-            />
-          ) : (
-            <button
-              onClick={() => setAddingAt(steps.length)}
-              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-surface-border text-ink-secondary hover:text-ink-primary hover:border-brand-500/40 hover:bg-surface-muted/40 transition-colors text-xs"
-            >
-              <Plus size={12} /> Add step
-            </button>
-          )}
-        </div>
+        <StepListSection
+          steps={steps}
+          parentId={null}
+          branch={null}
+          addingAt={addingAt}
+          setAddingAt={setAddingAt}
+          editingStepId={editingStepId}
+          setEditingStepId={setEditingStepId}
+          addStep={addStep}
+          updateStep={updateStep}
+          deleteStep={deleteStep}
+        />
       )}
 
       {editingMeta && (
@@ -375,12 +329,23 @@ function StepEditor({ initial, busy, submitLabel, onCancel, onSubmit }: {
   const [value, setValue] = useState(initial?.value ?? "");
   const [dataId, setDataId] = useState<number | null>(initial?.dataId ?? null);
   const [timeoutMs, setTimeoutMs] = useState<number>(initial?.timeoutMs ?? 5000);
+  // For IF rows: the predicate. Initialised from the existing step when
+  // editing, or a sensible default when creating a new IF.
+  const [condition, setCondition] = useState<WebStepCondition | null>(
+    initial?.condition ?? null,
+  );
 
   const def = WEB_STEP_ACTION_MAP[action];
+  const isIf = action === "IF";
   const elementsQ = useQuery({ queryKey: ["web-elements"], queryFn: webElementApi.list });
   const dataQ     = useQuery({ queryKey: ["web-test-data"], queryFn: webTestDataApi.list });
 
   function submit() {
+    if (isIf) {
+      if (!condition) return;
+      onSubmit({ action, condition });
+      return;
+    }
     if (def.needsSelector && selectorMode === "literal" && !selector.trim()) return;
     if (def.needsSelector && selectorMode === "catalog" && targetElementId == null) return;
     if (def.needsValue && valueMode === "literal" && !value.trim()) return;
@@ -419,7 +384,17 @@ function StepEditor({ initial, busy, submitLabel, onCancel, onSubmit }: {
         />
       </div>
 
-      {def.needsSelector && (
+      {/* IF rows show a condition builder instead of selector/value/timeout. */}
+      {isIf && (
+        <ConditionBuilder
+          value={condition}
+          onChange={setCondition}
+          elements={elementsQ.data ?? []}
+          testData={dataQ.data ?? []}
+        />
+      )}
+
+      {!isIf && def.needsSelector && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="label">Selector</span>
@@ -441,7 +416,7 @@ function StepEditor({ initial, busy, submitLabel, onCancel, onSubmit }: {
         </div>
       )}
 
-      {def.needsValue && (
+      {!isIf && def.needsValue && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="label">Value</span>
@@ -463,20 +438,23 @@ function StepEditor({ initial, busy, submitLabel, onCancel, onSubmit }: {
         </div>
       )}
 
-      <div>
-        <span className="label block mb-1.5">Timeout (ms)</span>
-        <input type="number" min={0} value={timeoutMs} onChange={(e) => setTimeoutMs(Number(e.target.value) || 0)}
-               className="input text-xs font-mono w-32" />
-      </div>
+      {!isIf && (
+        <div>
+          <span className="label block mb-1.5">Timeout (ms)</span>
+          <input type="number" min={0} value={timeoutMs} onChange={(e) => setTimeoutMs(Number(e.target.value) || 0)}
+                 className="input text-xs font-mono w-32" />
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-1">
         <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
         <Button variant="primary" size="sm" loading={busy} onClick={submit}
                 disabled={
-                  (def.needsSelector && selectorMode === "literal" && !selector.trim()) ||
-                  (def.needsSelector && selectorMode === "catalog" && targetElementId == null) ||
-                  (def.needsValue && valueMode === "literal" && !value.trim()) ||
-                  (def.needsValue && valueMode === "catalog" && dataId == null)
+                  (isIf && condition == null) ||
+                  (!isIf && def.needsSelector && selectorMode === "literal" && !selector.trim()) ||
+                  (!isIf && def.needsSelector && selectorMode === "catalog" && targetElementId == null) ||
+                  (!isIf && def.needsValue && valueMode === "literal" && !value.trim()) ||
+                  (!isIf && def.needsValue && valueMode === "catalog" && dataId == null)
                 }>
           {submitLabel}
         </Button>
@@ -502,6 +480,182 @@ function ModeToggle({ mode, onChange, catalogLabel }: {
                 mode === "catalog" ? "bg-brand-500/15 text-brand-300" : "text-ink-muted hover:text-ink-primary")}>
         {catalogLabel}
       </button>
+    </div>
+  );
+}
+
+/* ─────────────────────────  Condition builder  ──────────────────────── */
+
+/**
+ * Triple-dropdown UI for the IF predicate: subject type → subject ref →
+ * operator → value. Outputs a {@link WebStepCondition} or null when the
+ * selection is incomplete (the parent disables Submit accordingly).
+ *
+ * Two subject types in v1:
+ *  - element_state: pick a WebElement, then a Playwright-friendly state
+ *    predicate ("is visible", "text contains …").
+ *  - test_data_compare: pick a WebTestData row, then a value comparison.
+ *
+ * Raw JS expression is deliberately omitted — keeps the predicates
+ * statically analysable and matches the design recommendation from the
+ * conditional-logic research.
+ */
+function ConditionBuilder({
+  value, onChange, elements, testData,
+}: {
+  value: WebStepCondition | null;
+  onChange: (c: WebStepCondition | null) => void;
+  elements: WebElementView[];
+  testData: WebTestDataView[];
+}) {
+  const type = value?.type ?? "element_state";
+
+  // Tracks the currently-picked subject id even across type swaps so a
+  // typo on the operator doesn't blank the selection out.
+  function setType(next: "element_state" | "test_data_compare") {
+    if (next === "element_state") {
+      onChange({ type: "element_state", subjectId: elements[0]?.id ?? 0, operator: "is_visible", value: null });
+    } else {
+      onChange({ type: "test_data_compare", subjectId: testData[0]?.id ?? 0, operator: "equals", value: "" });
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-warning-500/30 bg-warning-500/5 p-3">
+      <div className="flex items-center justify-between">
+        <span className="label">Condition</span>
+        <div className="flex border border-surface-border rounded-md overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setType("element_state")}
+            className={cn("px-2 h-5 text-[9px] uppercase tracking-wider transition-colors",
+              type === "element_state" ? "bg-warning-500/20 text-warning-500" : "text-ink-muted hover:text-ink-primary")}
+          >
+            Element state
+          </button>
+          <button
+            type="button"
+            onClick={() => setType("test_data_compare")}
+            className={cn("px-2 h-5 text-[9px] uppercase tracking-wider transition-colors border-l border-surface-border",
+              type === "test_data_compare" ? "bg-warning-500/20 text-warning-500" : "text-ink-muted hover:text-ink-primary")}
+          >
+            Test data
+          </button>
+        </div>
+      </div>
+
+      {type === "element_state" ? (
+        <ElementStateRow value={value as any} onChange={onChange} elements={elements} />
+      ) : (
+        <TestDataCompareRow value={value as any} onChange={onChange} testData={testData} />
+      )}
+    </div>
+  );
+}
+
+function ElementStateRow({
+  value, onChange, elements,
+}: {
+  value: Extract<WebStepCondition, { type: "element_state" }> | null;
+  onChange: (c: WebStepCondition | null) => void;
+  elements: WebElementView[];
+}) {
+  const subjectId = value?.subjectId ?? elements[0]?.id ?? 0;
+  const operator  = value?.operator ?? "is_visible";
+  const literal   = value?.value ?? "";
+  const needsValue = operator === "text_contains" || operator === "text_equals";
+
+  function emit(next: Partial<Extract<WebStepCondition, { type: "element_state" }>>) {
+    onChange({
+      type: "element_state",
+      subjectId, operator, value: literal,
+      ...next,
+    });
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_1fr] gap-2 items-start">
+      <select
+        value={subjectId} onChange={(e) => emit({ subjectId: Number(e.target.value) })}
+        className="input text-xs"
+      >
+        <option value="">{elements.length === 0 ? "No elements — save one first" : "Pick an element…"}</option>
+        {elements.map((el) => (
+          <option key={el.id} value={el.id}>{el.name} · {el.primaryStrategy}</option>
+        ))}
+      </select>
+
+      <select
+        value={operator} onChange={(e) => emit({ operator: e.target.value as any })}
+        className="input text-xs"
+      >
+        <option value="is_visible">is visible</option>
+        <option value="is_hidden">is hidden</option>
+        <option value="exists">exists</option>
+        <option value="text_contains">text contains</option>
+        <option value="text_equals">text equals</option>
+      </select>
+
+      {needsValue ? (
+        <input
+          type="text" value={literal ?? ""} onChange={(e) => emit({ value: e.target.value })}
+          placeholder="expected text"
+          className="input text-xs font-mono"
+        />
+      ) : (
+        <span className="text-[10px] text-ink-muted italic self-center pl-1">no value needed</span>
+      )}
+    </div>
+  );
+}
+
+function TestDataCompareRow({
+  value, onChange, testData,
+}: {
+  value: Extract<WebStepCondition, { type: "test_data_compare" }> | null;
+  onChange: (c: WebStepCondition | null) => void;
+  testData: WebTestDataView[];
+}) {
+  const subjectId = value?.subjectId ?? testData[0]?.id ?? 0;
+  const operator  = value?.operator ?? "equals";
+  const literal   = value?.value ?? "";
+
+  function emit(next: Partial<Extract<WebStepCondition, { type: "test_data_compare" }>>) {
+    onChange({
+      type: "test_data_compare",
+      subjectId, operator, value: literal,
+      ...next,
+    });
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_1fr] gap-2 items-start">
+      <select
+        value={subjectId} onChange={(e) => emit({ subjectId: Number(e.target.value) })}
+        className="input text-xs"
+      >
+        <option value="">{testData.length === 0 ? "No test data — save one first" : "Pick test data…"}</option>
+        {testData.map((td) => (
+          <option key={td.id} value={td.id}>{td.name} · {td.environment}{td.sensitive ? " 🔒" : ""}</option>
+        ))}
+      </select>
+
+      <select
+        value={operator} onChange={(e) => emit({ operator: e.target.value as any })}
+        className="input text-xs"
+      >
+        <option value="equals">equals</option>
+        <option value="not_equals">not equals</option>
+        <option value="contains">contains</option>
+        <option value="greater_than">greater than</option>
+        <option value="less_than">less than</option>
+      </select>
+
+      <input
+        type="text" value={literal} onChange={(e) => emit({ value: e.target.value })}
+        placeholder="expected value"
+        className="input text-xs font-mono"
+      />
     </div>
   );
 }
@@ -688,4 +842,291 @@ function NewStepCard({
       />
     </Card>
   );
+}
+
+/* ─────────────────────────  Recursive step list  ─────────────────────── */
+
+type StepListMutations = {
+  addStep: ReturnType<typeof useMutation<WebStepView, unknown, WebStepCreate>>;
+  updateStep: ReturnType<typeof useMutation<WebStepView, unknown, { stepId: number; b: WebStepUpdate }>>;
+  deleteStep: ReturnType<typeof useMutation<void, unknown, number>>;
+};
+
+/**
+ * Renders one block of steps (root scenario body, or one branch inside an
+ * IF). Recursion: when this section encounters an IF step it renders an
+ * IfStepCard which itself contains two StepListSection instances (one
+ * per branch). Insert-here lines call addStep with the scope's parentId +
+ * branch, so the backend slots the new step into the right place.
+ */
+function StepListSection({
+  steps, parentId, branch,
+  addingAt, setAddingAt, editingStepId, setEditingStepId,
+  addStep, updateStep, deleteStep,
+}: {
+  steps: WebStepView[];
+  parentId: number | null;
+  branch: "then" | "else" | null;
+  addingAt: InsertSlot | null;
+  setAddingAt: (s: InsertSlot | null) => void;
+  editingStepId: number | null;
+  setEditingStepId: (id: number | null) => void;
+} & StepListMutations) {
+  const slot = (position: number) => ({ parentId, branch, position });
+  return (
+    <div className="space-y-2">
+      {/* Prepend affordance for non-empty branches */}
+      {steps.length > 0 && (
+        <InsertHereLine
+          active={sameSlot(addingAt, slot(0))}
+          onClick={() => setAddingAt(slot(0))}
+        />
+      )}
+      {sameSlot(addingAt, slot(0)) && (
+        <NewStepCard
+          busy={addStep.isPending}
+          onCancel={() => setAddingAt(null)}
+          onSubmit={(b) => addStep.mutate(
+            { ...b, position: 0, parentStepId: parentId, branchLabel: branch },
+            { onSuccess: () => setAddingAt(null) },
+          )}
+        />
+      )}
+      {steps.map((step, idx) => (
+        <Fragment key={step.id}>
+          {step.action === "IF" ? (
+            <IfStepCard
+              step={step}
+              isEditingMeta={editingStepId === step.id}
+              onEditMeta={() => setEditingStepId(step.id)}
+              onCancelEditMeta={() => setEditingStepId(null)}
+              onDelete={() => { if (confirm(`Delete IF block (and its children)?`)) deleteStep.mutate(step.id); }}
+              onSubmitMeta={(b) => updateStep.mutate(
+                { stepId: step.id, b: b as WebStepUpdate },
+                { onSuccess: () => setEditingStepId(null) },
+              )}
+              addingAt={addingAt}
+              setAddingAt={setAddingAt}
+              editingStepId={editingStepId}
+              setEditingStepId={setEditingStepId}
+              addStep={addStep}
+              updateStep={updateStep}
+              deleteStep={deleteStep}
+              busy={updateStep.isPending}
+            />
+          ) : (
+            <StepRow
+              step={step}
+              isEditing={editingStepId === step.id}
+              onEdit={() => setEditingStepId(step.id)}
+              onCancelEdit={() => setEditingStepId(null)}
+              onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
+              onSubmitEdit={(b) => updateStep.mutate(
+                { stepId: step.id, b: b as WebStepUpdate },
+                { onSuccess: () => setEditingStepId(null) },
+              )}
+              busy={updateStep.isPending}
+            />
+          )}
+          {idx < steps.length - 1 && (
+            <InsertHereLine
+              active={sameSlot(addingAt, slot(idx + 1))}
+              onClick={() => setAddingAt(slot(idx + 1))}
+            />
+          )}
+          {sameSlot(addingAt, slot(idx + 1)) && idx < steps.length - 1 && (
+            <NewStepCard
+              busy={addStep.isPending}
+              onCancel={() => setAddingAt(null)}
+              onSubmit={(b) => addStep.mutate(
+                { ...b, position: idx + 1, parentStepId: parentId, branchLabel: branch },
+                { onSuccess: () => setAddingAt(null) },
+              )}
+            />
+          )}
+        </Fragment>
+      ))}
+
+      {/* Always-visible "Add step" pill at the bottom of every branch. */}
+      {sameSlot(addingAt, slot(steps.length)) ? (
+        <NewStepCard
+          busy={addStep.isPending}
+          onCancel={() => setAddingAt(null)}
+          onSubmit={(b) => addStep.mutate(
+            { ...b, parentStepId: parentId, branchLabel: branch },
+            { onSuccess: () => setAddingAt(null) },
+          )}
+        />
+      ) : (
+        <button
+          onClick={() => setAddingAt(slot(steps.length))}
+          className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-surface-border text-ink-secondary hover:text-ink-primary hover:border-brand-500/40 hover:bg-surface-muted/40 transition-colors text-xs"
+        >
+          <Plus size={12} /> Add step
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────  IF block card  ──────────────────────────── */
+
+/**
+ * Renders an IF step as a collapsible card with two lanes: the "then"
+ * branch (green-tinted) and the "else" branch (red-tinted). Each lane
+ * renders its children via StepListSection — the recursion that makes
+ * nested IFs work.
+ *
+ * The condition itself is shown as a one-line summary in the header.
+ * Clicking the pencil opens an inline editor focused on the condition;
+ * the action is locked (you can't turn an IF into a CLICK because that
+ * would orphan the children).
+ */
+function IfStepCard({
+  step, isEditingMeta, onEditMeta, onCancelEditMeta, onDelete, onSubmitMeta,
+  addingAt, setAddingAt, editingStepId, setEditingStepId,
+  addStep, updateStep, deleteStep, busy,
+}: {
+  step: WebStepView;
+  isEditingMeta: boolean;
+  onEditMeta: () => void;
+  onCancelEditMeta: () => void;
+  onDelete: () => void;
+  onSubmitMeta: (b: WebStepUpdate) => void;
+  addingAt: InsertSlot | null;
+  setAddingAt: (s: InsertSlot | null) => void;
+  editingStepId: number | null;
+  setEditingStepId: (id: number | null) => void;
+  busy: boolean;
+} & StepListMutations) {
+  const [collapsed, setCollapsed] = useState(false);
+  const thenChildren = step.children.filter((c) => c.branchLabel === "then");
+  const elseChildren = step.children.filter((c) => c.branchLabel === "else");
+  const summary = step.condition ? describeCondition(step.condition) : "no condition";
+
+  if (isEditingMeta) {
+    return (
+      <Card className="border-l-2 border-l-warning-500 bg-warning-500/5 p-3">
+        <div className="text-[10px] uppercase tracking-wider font-semibold text-warning-500 mb-3 inline-flex items-center gap-1.5">
+          <X size={11} className="cursor-pointer" onClick={onCancelEditMeta} /> Edit IF condition
+        </div>
+        <StepEditor
+          initial={step}
+          busy={busy}
+          submitLabel="Save"
+          onCancel={onCancelEditMeta}
+          onSubmit={onSubmitMeta}
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-l-2 border-l-warning-500 bg-warning-500/5 p-3 group">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          className="p-0.5 rounded text-warning-500 hover:text-ink-primary"
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </button>
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning-500 rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5">
+          <GitBranch size={11} />
+          IF
+        </span>
+        <span className="text-[11px] text-ink-secondary truncate font-mono">{summary}</span>
+        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={onEditMeta} className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-muted" title="Edit condition">
+            <Pencil size={13} />
+          </button>
+          <button onClick={onDelete} className="p-1.5 rounded text-ink-muted hover:text-danger-500 hover:bg-surface-muted" title="Delete IF (and children)">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <div className="mt-3 space-y-3">
+          {/* THEN lane */}
+          <div className="pl-3 border-l-2 border-l-success-500/40">
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-success-500 mb-2">Then</div>
+            {thenChildren.length === 0 ? (
+              <button
+                onClick={() => setAddingAt({ parentId: step.id, branch: "then", position: 0 })}
+                className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-success-500/30 text-ink-secondary hover:text-ink-primary hover:border-success-500/50 hover:bg-success-500/5 transition-colors text-xs"
+              >
+                <Plus size={12} /> Add step to THEN branch
+              </button>
+            ) : (
+              <StepListSection
+                steps={thenChildren}
+                parentId={step.id}
+                branch="then"
+                addingAt={addingAt}
+                setAddingAt={setAddingAt}
+                editingStepId={editingStepId}
+                setEditingStepId={setEditingStepId}
+                addStep={addStep}
+                updateStep={updateStep}
+                deleteStep={deleteStep}
+              />
+            )}
+          </div>
+
+          {/* ELSE lane — only shown if it has children OR the user is adding
+              into it. Otherwise show an "Add ELSE branch" hint button. */}
+          {elseChildren.length === 0 && !(addingAt?.parentId === step.id && addingAt.branch === "else") ? (
+            <button
+              onClick={() => setAddingAt({ parentId: step.id, branch: "else", position: 0 })}
+              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-surface-border text-ink-muted hover:text-ink-primary hover:border-danger-500/40 hover:bg-danger-500/5 transition-colors text-xs"
+            >
+              <Plus size={12} /> Add ELSE branch
+            </button>
+          ) : (
+            <div className="pl-3 border-l-2 border-l-danger-500/40">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-danger-500 mb-2">Else</div>
+              <StepListSection
+                steps={elseChildren}
+                parentId={step.id}
+                branch="else"
+                addingAt={addingAt}
+                setAddingAt={setAddingAt}
+                editingStepId={editingStepId}
+                setEditingStepId={setEditingStepId}
+                addStep={addStep}
+                updateStep={updateStep}
+                deleteStep={deleteStep}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** One-line human description of an IF condition for the card header. */
+function describeCondition(c: NonNullable<WebStepView["condition"]>): string {
+  if (c.type === "element_state") {
+    const op =
+      c.operator === "is_visible"    ? "is visible"
+    : c.operator === "is_hidden"     ? "is hidden"
+    : c.operator === "exists"        ? "exists"
+    : c.operator === "text_contains" ? `text contains "${c.value ?? ""}"`
+    : c.operator === "text_equals"   ? `text equals "${c.value ?? ""}"`
+    :                                  c.operator;
+    return `element #${c.subjectId} ${op}`;
+  }
+  if (c.type === "test_data_compare") {
+    const op =
+      c.operator === "equals"        ? "=="
+    : c.operator === "not_equals"    ? "!="
+    : c.operator === "contains"      ? "contains"
+    : c.operator === "greater_than"  ? ">"
+    : c.operator === "less_than"     ? "<"
+    :                                  c.operator;
+    return `data #${c.subjectId} ${op} "${c.value}"`;
+  }
+  return "(unknown condition)";
 }

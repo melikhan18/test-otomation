@@ -29,6 +29,8 @@ export const browserApi = {
  * selector + value, not element-id + data-id + literal.
  */
 export type WebStepAction =
+  // Control flow — IF is a tree node, its children live in then/else branches.
+  | "IF"
   | "GOTO" | "RELOAD" | "GO_BACK" | "GO_FORWARD"
   | "CLICK" | "DBL_CLICK" | "FILL" | "PRESS_KEY"
   | "CHECK" | "UNCHECK" | "SELECT" | "HOVER"
@@ -40,11 +42,26 @@ export type WebStepAction =
   | "ASSERT_ATTRIBUTE"
   | "SCREENSHOT" | "COMMENT" | "EVAL_JS";
 
+/** Predicate carried by an IF step. Mirrors backend WebStepCondition. */
+export type WebStepCondition =
+  | {
+      type: "element_state";
+      subjectId: number;
+      operator: "is_visible" | "is_hidden" | "exists" | "text_contains" | "text_equals";
+      value: string | null;
+    }
+  | {
+      type: "test_data_compare";
+      subjectId: number;
+      operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than";
+      value: string;
+    };
+
 /** Per-action UI metadata — same shape as Android's StepActionDef. */
 export type WebStepActionDef = {
   key: WebStepAction;
   label: string;
-  category: "navigation" | "interaction" | "wait" | "assert" | "util";
+  category: "control" | "navigation" | "interaction" | "wait" | "assert" | "util";
   /** Does this action need a selector string? */
   needsSelector: boolean;
   /** Does this action need a value string? (URL, text to type, expected match, etc.) */
@@ -58,6 +75,7 @@ export type WebStepActionDef = {
 };
 
 export type WebStepActionIconName =
+  | "GitBranch"
   | "Globe" | "RotateCw" | "ArrowLeft" | "ArrowRight"
   | "MousePointerClick" | "MousePointer2" | "Keyboard" | "KeyRound"
   | "CheckSquare" | "Square" | "ListChecks" | "Hand"
@@ -66,6 +84,9 @@ export type WebStepActionIconName =
   | "Camera" | "MessageSquare" | "Code2";
 
 export const WEB_STEP_ACTIONS: WebStepActionDef[] = [
+  /* ── Control ─────────────────────────────────────────────────────── */
+  { key: "IF", label: "If…", category: "control", needsSelector: false, needsValue: false, tone: "amber", iconName: "GitBranch", description: "Branch: run children inside 'then' when the condition holds, otherwise 'else'." },
+
   /* ── Navigation ──────────────────────────────────────────────────── */
   { key: "GOTO",        label: "Go to URL",     category: "navigation", needsSelector: false, needsValue: true,  valueLabel: "https://example.com", tone: "blue", iconName: "Globe",       description: "Navigate the browser to the given URL." },
   { key: "RELOAD",      label: "Reload",        category: "navigation", needsSelector: false, needsValue: false,                                    tone: "blue", iconName: "RotateCw",    description: "Reload the current page." },
@@ -123,6 +144,15 @@ export type WebStepView = {
   dataId: number | null;
   timeoutMs: number;
   screenshotAfter: boolean;
+  /** Tree position. Both null = root level (legacy/flat). Otherwise this
+   *  step lives inside parentStepId's `then` or `else` branch. */
+  parentStepId: number | null;
+  branchLabel: "then" | "else" | null;
+  /** Only populated when action === "IF". */
+  condition: WebStepCondition | null;
+  /** Populated for IF rows (concatenation of then-children then else-children;
+   *  each child carries its own branchLabel). Empty for leaf actions. */
+  children: WebStepView[];
   createdAt: string;
 };
 
@@ -161,10 +191,15 @@ export type WebStepCreate = {
   dataId?: number | null;
   timeoutMs?: number | null;
   screenshotAfter?: boolean | null;
-  /** Insertion index (0-based). null = append at end. */
+  /** Insertion index (0-based) within the target scope. null = append. */
   position?: number | null;
+  /** Tree position. Both null = root level. Both set = inside an IF branch. */
+  parentStepId?: number | null;
+  branchLabel?: "then" | "else" | null;
+  /** Required when action === "IF"; rejected otherwise. */
+  condition?: WebStepCondition | null;
 };
-export type WebStepUpdate = Omit<WebStepCreate, "position">;
+export type WebStepUpdate = Omit<WebStepCreate, "position" | "parentStepId" | "branchLabel">;
 
 export const webScenarioApi = {
   list: () => api.get<WebScenarioSummary[]>("/api/scenarios").then((r) => r.data),
