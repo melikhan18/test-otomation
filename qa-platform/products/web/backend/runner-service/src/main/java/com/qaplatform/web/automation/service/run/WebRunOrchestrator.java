@@ -6,6 +6,7 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Tracing;
+import com.microsoft.playwright.options.RecordVideoSize;
 import com.microsoft.playwright.options.ViewportSize;
 import com.qaplatform.common.error.ApiException;
 import com.qaplatform.common.runengine.spi.ArtifactSink;
@@ -186,13 +187,18 @@ public class WebRunOrchestrator {
             BrowserType type = browserType(pw, profile.engine());
             try (Browser browser = type.launch(new BrowserType.LaunchOptions().setHeadless(headless))) {
 
+                // Playwright otherwise downscales the recording to ~800px-wide
+                // for performance; pin the video size to the viewport so the
+                // captured MP4 matches what the test actually saw (e.g. a
+                // 1920×1080 desktop profile records at 1920×1080, not 800×450).
                 Browser.NewContextOptions ctxOpts = new Browser.NewContextOptions()
                         .setViewportSize(new ViewportSize(profile.width(), profile.height()))
                         .setDeviceScaleFactor(profile.deviceScaleFactor())
                         .setIsMobile(profile.isMobile())
                         .setLocale(profile.locale())
                         .setTimezoneId(profile.timezone())
-                        .setRecordVideoDir(videoDir);
+                        .setRecordVideoDir(videoDir)
+                        .setRecordVideoSize(new RecordVideoSize(profile.width(), profile.height()));
                 if (profile.userAgent() != null && !profile.userAgent().isBlank()) {
                     ctxOpts.setUserAgent(profile.userAgent());
                 }
