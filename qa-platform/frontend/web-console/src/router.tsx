@@ -18,10 +18,9 @@ import WorkspacePage from "@/pages/automation/WorkspacePage";
 import RunDetailPage from "@/pages/automation/RunDetailPage";
 import SuiteRunDetailPage from "@/pages/automation/SuiteRunDetailPage";
 import ReportsPage from "@/pages/automation/ReportsPage";
-import WebAutomationPage from "@/pages/automation/WebAutomationPage";
+import WebWorkspacePage from "@/pages/automation/WebWorkspacePage";
 import WebElementsPage from "@/pages/automation/WebElementsPage";
 import WebDataPage from "@/pages/automation/WebDataPage";
-import WebSuitesPage from "@/pages/automation/WebSuitesPage";
 import MembersPage from "@/pages/MembersPage";
 import AppLayout from "@/components/AppLayout";
 
@@ -159,10 +158,11 @@ export const router = createBrowserRouter([
           {
             element: <RequirePlatform platform="WEB" />,
             children: [
-              { path: "/automation/web",          element: <WebAutomationPage /> },
+              { path: "/automation/web",          element: <WebWorkspacePage /> },
               { path: "/automation/web/elements", element: <WebElementsPage /> },
               { path: "/automation/web/data",     element: <WebDataPage /> },
-              { path: "/automation/web/suites",   element: <WebSuitesPage /> },
+              // Legacy: /automation/web/suites is consolidated into the workspace.
+              { path: "/automation/web/suites",   element: <Navigate to="/automation/web" replace /> },
             ],
           },
         ],

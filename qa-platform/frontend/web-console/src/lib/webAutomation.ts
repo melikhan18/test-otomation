@@ -310,6 +310,38 @@ export const webTestDataApi = {
   environments: () => api.get<string[]>("/api/test-data/environments").then((r) => r.data),
 };
 
+/* ──────────────────────────  Workspace tree  ────────────────────────── */
+
+export type WebWorkspaceScenarioNode = {
+  id: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  stepCount: number;
+  version: number;
+  updatedAt: string;
+};
+
+export type WebWorkspaceSuiteNode = {
+  id: number;
+  name: string;
+  description: string | null;
+  tags: string[];
+  updatedAt: string;
+  scenarios: WebWorkspaceScenarioNode[];
+};
+
+export type WebWorkspaceTree = {
+  suites: WebWorkspaceSuiteNode[];
+  orphanScenarios: WebWorkspaceScenarioNode[];
+  totalSuites: number;
+  totalScenarios: number;
+};
+
+export const webWorkspaceApi = {
+  tree: () => api.get<WebWorkspaceTree>("/api/workspace/tree").then((r) => r.data),
+};
+
 /* ──────────────────────────  Suites  ────────────────────────────────── */
 
 export type WebSuiteScenarioRef = {
