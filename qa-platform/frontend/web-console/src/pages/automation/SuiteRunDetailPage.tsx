@@ -16,7 +16,7 @@ import TagEditor from "@/components/automation/TagEditor";
 import {
   suiteRunApi, type RunStatus, type SuiteRunChild, type SuiteRunStatus, type SuiteRunView,
 } from "@/lib/automation";
-import { distinctTags, useReportFeed } from "@/lib/reports";
+import { distinctTags, fetchSuiteRunView, platformSupportsRunTagsAndCancel, useReportFeed } from "@/lib/reports";
 import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/cn";
 
@@ -26,6 +26,7 @@ export default function SuiteRunDetailPage() {
   const nav = useNavigate();
   const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const activeProjectId = useAuthStore((s) => s.activeProjectId);
+  const platform       = useAuthStore((s) => s.activePlatform);
 
   // Suite-run id is project-scoped — bounce to Reports on tenancy switch so the
   // user doesn't land on a permanent "Suite run not found" page.
@@ -42,10 +43,13 @@ export default function SuiteRunDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCompanyId, activeProjectId]);
 
-  // Poll while the suite is in flight; back off once it's terminal.
+  // Poll while the suite is in flight; back off once it's terminal. The
+  // fetcher is platform-aware — on WEB we hit /api/suite-runs (gateway-routed
+  // to the web runner) and adapt the response into the unified SuiteRunView
+  // so the rest of the page renders the same way for both stacks.
   const q = useQuery({
-    queryKey: ["automation-suite-run", activeCompanyId ?? null, id],
-    queryFn: () => suiteRunApi.get(id),
+    queryKey: ["automation-suite-run", platform, activeCompanyId ?? null, id],
+    queryFn: () => fetchSuiteRunView(platform, id),
     enabled: !Number.isNaN(id) && activeCompanyId != null,
     refetchOnWindowFocus: false,
     refetchInterval: (qq) => {
@@ -120,12 +124,14 @@ export default function SuiteRunDetailPage() {
 /* ─────────────────────────────  Header  ────────────────────────────── */
 
 function Header({ sr, suggestions }: { sr: SuiteRunView; suggestions: string[] }) {
+  const platform = useAuthStore((s) => s.activePlatform);
+  const supportsTagsCancel = platformSupportsRunTagsAndCancel(platform);
   const qc = useQueryClient();
   const tagsMut = useMutation({
     mutationFn: (tags: string[]) => suiteRunApi.updateTags(sr.id, tags),
     onSuccess: (next) => {
       qc.setQueryData(["automation-suite-run", sr.id], next);
-      qc.invalidateQueries({ queryKey: ["automation-suite-runs"] });
+      qc.invalidateQueries({ queryKey: ["report-suite-runs"] });
     },
   });
   const tone = suiteTone(sr.status);
@@ -144,18 +150,22 @@ function Header({ sr, suggestions }: { sr: SuiteRunView; suggestions: string[] }
             {sr.suiteName ?? "(suite deleted)"}
           </div>
           <div className="text-xs text-ink-muted mt-1 flex items-center gap-3 flex-wrap">
-            <span>Device #{sr.deviceId}</span>
+            {platform === "WEB"
+              ? <span>browser run</span>
+              : <span>Device #{sr.deviceId}</span>}
             <span>env <code className="font-mono">{sr.environment}</code></span>
             <span>created {new Date(sr.createdAt).toLocaleTimeString()}</span>
             {sr.durationMs != null && <span>· {(sr.durationMs / 1000).toFixed(1)}s</span>}
           </div>
-          <div className="mt-2">
-            <TagEditor
-              tags={sr.tags ?? []}
-              suggestions={suggestions}
-              onChange={(next) => tagsMut.mutateAsync(next).then(() => undefined)}
-            />
-          </div>
+          {supportsTagsCancel && (
+            <div className="mt-2">
+              <TagEditor
+                tags={sr.tags ?? []}
+                suggestions={suggestions}
+                onChange={(next) => tagsMut.mutateAsync(next).then(() => undefined)}
+              />
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-3 gap-3 text-right">
           <Stat label="Total"  value={sr.totalScenarios} />
