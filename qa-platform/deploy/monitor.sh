@@ -53,6 +53,12 @@ cleanup() { tput cnorm 2>/dev/null; printf "%s\n" "$RST"; exit 0; }
 trap cleanup INT TERM
 tput civis 2>/dev/null
 
+# Clear the screen once at startup; the loop below repaints in place so the
+# terminal doesn't flicker every refresh. After the first frame we just move
+# the cursor home (ESC[H) and overwrite line-by-line, then trim any leftover
+# rows below with ESC[J (clear to end of screen).
+clear
+
 # CPU sampling — we keep the previous tick around and compute the delta
 read_cpu() {
     awk '/^cpu / {
@@ -65,7 +71,10 @@ read -r CPU_T0 CPU_B0 < <(read_cpu)
 
 # ── Main loop ──────────────────────────────────────────────────────────────
 while true; do
-    clear
+    # Cursor to top-left without erasing the screen — the next prints
+    # overwrite the previous frame in-place, eliminating the per-tick
+    # flash you get with `clear`.
+    printf '\033[H'
 
     # ── Header ────────────────────────────────────────
     NOW=$(date '+%F %T')
@@ -157,6 +166,10 @@ while true; do
     fi
 
     printf "${D}  Refresh: ${INTERVAL}s · Ctrl+C to exit${RST}\n"
+
+    # Clear everything below the cursor so a shorter frame (e.g. container
+    # count dropped) doesn't leave orphaned rows from the previous tick.
+    printf '\033[J'
 
     sleep "$INTERVAL"
 done
