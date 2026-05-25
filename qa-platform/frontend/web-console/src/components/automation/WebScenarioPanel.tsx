@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import ActionPicker from "@/components/automation/ActionPicker";
 import { cn } from "@/lib/cn";
 import {
   browserApi, webElementApi, webRunApi, webScenarioApi, webTestDataApi,
@@ -15,6 +16,23 @@ import {
   type BrowserProfile, type WebElementView, type WebScenarioUpdate,
   type WebStepAction, type WebStepCreate, type WebStepUpdate, type WebStepView, type WebTestDataView,
 } from "@/lib/webAutomation";
+
+/** One-click quick picks above the popover — cover the bulk of typical
+ *  Playwright-style web scripts. Anything else stays one search away. */
+const WEB_QUICK_PICKS: WebStepAction[] = [
+  "GOTO", "CLICK", "FILL", "WAIT_FOR_SELECTOR", "ASSERT_VISIBLE", "ASSERT_TEXT_CONTAINS",
+];
+
+function humaniseWebCategory(key: string): string {
+  switch (key) {
+    case "navigation":  return "Navigation";
+    case "interaction": return "Interaction";
+    case "wait":        return "Wait";
+    case "assert":      return "Verify";
+    case "util":        return "Util";
+    default:            return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+}
 
 type Props = {
   scenarioId: number;
@@ -370,34 +388,27 @@ function StepEditor({ initial, busy, submitLabel, onCancel, onSubmit }: {
     });
   }
 
-  const grouped = WEB_STEP_ACTIONS.reduce<Record<string, typeof WEB_STEP_ACTIONS>>((acc, a) => {
-    (acc[a.category] ??= []).push(a); return acc;
-  }, {});
+  // Web action catalog → generic picker options. Category is humanised here so
+  // the popover headings read "Navigation" not "navigation".
+  const pickerOptions = WEB_STEP_ACTIONS.map((a) => ({
+    key: a.key,
+    label: a.label,
+    category: humaniseWebCategory(a.category),
+    description: a.description,
+    iconName: a.iconName,
+    tone: a.tone,
+  }));
 
   return (
     <div className="space-y-3">
       <div>
         <span className="label block mb-1.5">Action</span>
-        <div className="space-y-2">
-          {Object.entries(grouped).map(([cat, actions]) => (
-            <div key={cat}>
-              <div className="text-[10px] uppercase tracking-wider text-ink-muted mb-1">{cat}</div>
-              <div className="flex flex-wrap gap-1.5">
-                {actions.map((a) => (
-                  <button key={a.key} onClick={() => setAction(a.key)}
-                          className={cn(
-                            "px-2.5 h-7 rounded-md text-[11px] font-medium border transition-colors",
-                            action === a.key
-                              ? "bg-brand-500/15 border-brand-500/40 text-brand-300"
-                              : "border-surface-border text-ink-secondary hover:text-ink-primary",
-                          )}>
-                    {a.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <ActionPicker
+          value={action}
+          onChange={(k) => setAction(k as WebStepAction)}
+          options={pickerOptions}
+          quickPickKeys={WEB_QUICK_PICKS}
+        />
       </div>
 
       {def.needsSelector && (

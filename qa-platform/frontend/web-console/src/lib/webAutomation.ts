@@ -52,45 +52,56 @@ export type WebStepActionDef = {
   /** Placeholder shown in the value input — points the user at the expected shape. */
   valueLabel?: string;
   tone: "blue" | "green" | "amber" | "violet" | "gray";
+  /** One-line "what does this do" tooltip shown in the Action picker. */
+  description: string;
+  iconName: WebStepActionIconName;
 };
+
+export type WebStepActionIconName =
+  | "Globe" | "RotateCw" | "ArrowLeft" | "ArrowRight"
+  | "MousePointerClick" | "MousePointer2" | "Keyboard" | "KeyRound"
+  | "CheckSquare" | "Square" | "ListChecks" | "Hand"
+  | "Hourglass" | "Loader" | "Clock"
+  | "Eye" | "EyeOff" | "Equal" | "TextSearch" | "Link" | "Heading1" | "Hash"
+  | "Camera" | "MessageSquare" | "Code2";
 
 export const WEB_STEP_ACTIONS: WebStepActionDef[] = [
   /* ── Navigation ──────────────────────────────────────────────────── */
-  { key: "GOTO",        label: "Go to URL",     category: "navigation", needsSelector: false, needsValue: true,  valueLabel: "https://example.com",                tone: "blue" },
-  { key: "RELOAD",      label: "Reload",        category: "navigation", needsSelector: false, needsValue: false,                                                  tone: "blue" },
-  { key: "GO_BACK",     label: "Go back",       category: "navigation", needsSelector: false, needsValue: false,                                                  tone: "blue" },
-  { key: "GO_FORWARD",  label: "Go forward",    category: "navigation", needsSelector: false, needsValue: false,                                                  tone: "blue" },
+  { key: "GOTO",        label: "Go to URL",     category: "navigation", needsSelector: false, needsValue: true,  valueLabel: "https://example.com", tone: "blue", iconName: "Globe",       description: "Navigate the browser to the given URL." },
+  { key: "RELOAD",      label: "Reload",        category: "navigation", needsSelector: false, needsValue: false,                                    tone: "blue", iconName: "RotateCw",    description: "Reload the current page." },
+  { key: "GO_BACK",     label: "Go back",       category: "navigation", needsSelector: false, needsValue: false,                                    tone: "blue", iconName: "ArrowLeft",   description: "Go to the previous page in browser history." },
+  { key: "GO_FORWARD",  label: "Go forward",    category: "navigation", needsSelector: false, needsValue: false,                                    tone: "blue", iconName: "ArrowRight",  description: "Go to the next page in browser history." },
 
   /* ── Interaction ─────────────────────────────────────────────────── */
-  { key: "CLICK",       label: "Click",         category: "interaction", needsSelector: true,  needsValue: false,                                                 tone: "green" },
-  { key: "DBL_CLICK",   label: "Double click",  category: "interaction", needsSelector: true,  needsValue: false,                                                 tone: "green" },
-  { key: "FILL",        label: "Fill",          category: "interaction", needsSelector: true,  needsValue: true,  valueLabel: "text to type",                    tone: "green" },
-  { key: "PRESS_KEY",   label: "Press key",     category: "interaction", needsSelector: false, needsValue: true,  valueLabel: "Enter | Escape | Tab | …",         tone: "green" },
-  { key: "CHECK",       label: "Check",         category: "interaction", needsSelector: true,  needsValue: false,                                                 tone: "green" },
-  { key: "UNCHECK",     label: "Uncheck",       category: "interaction", needsSelector: true,  needsValue: false,                                                 tone: "green" },
-  { key: "SELECT",      label: "Select option", category: "interaction", needsSelector: true,  needsValue: true,  valueLabel: "option value",                    tone: "green" },
-  { key: "HOVER",       label: "Hover",         category: "interaction", needsSelector: true,  needsValue: false,                                                 tone: "green" },
+  { key: "CLICK",       label: "Click",         category: "interaction", needsSelector: true,  needsValue: false,                                              tone: "green", iconName: "MousePointerClick", description: "Click the element matched by the selector." },
+  { key: "DBL_CLICK",   label: "Double click",  category: "interaction", needsSelector: true,  needsValue: false,                                              tone: "green", iconName: "MousePointer2",    description: "Double-click the element." },
+  { key: "FILL",        label: "Fill",          category: "interaction", needsSelector: true,  needsValue: true,  valueLabel: "text to type",                  tone: "green", iconName: "Keyboard",          description: "Type the given text into an input. Clears existing content first." },
+  { key: "PRESS_KEY",   label: "Press key",     category: "interaction", needsSelector: false, needsValue: true,  valueLabel: "Enter | Escape | Tab | …",       tone: "green", iconName: "KeyRound",          description: "Send a keyboard key (Enter, Escape, Tab, ArrowDown, …)." },
+  { key: "CHECK",       label: "Check",         category: "interaction", needsSelector: true,  needsValue: false,                                              tone: "green", iconName: "CheckSquare",       description: "Check the targeted checkbox / radio (idempotent)." },
+  { key: "UNCHECK",     label: "Uncheck",       category: "interaction", needsSelector: true,  needsValue: false,                                              tone: "green", iconName: "Square",            description: "Uncheck the targeted checkbox (idempotent)." },
+  { key: "SELECT",      label: "Select option", category: "interaction", needsSelector: true,  needsValue: true,  valueLabel: "option value",                  tone: "green", iconName: "ListChecks",        description: "Pick an option in a <select> element by value." },
+  { key: "HOVER",       label: "Hover",         category: "interaction", needsSelector: true,  needsValue: false,                                              tone: "green", iconName: "Hand",              description: "Move the pointer over the element (triggers :hover styles)." },
 
   /* ── Wait ────────────────────────────────────────────────────────── */
-  { key: "WAIT_FOR_SELECTOR",   label: "Wait for selector",   category: "wait", needsSelector: true,  needsValue: false,                                          tone: "amber" },
-  { key: "WAIT_FOR_LOAD_STATE", label: "Wait for load state", category: "wait", needsSelector: false, needsValue: true,  valueLabel: "load | domcontentloaded | networkidle", tone: "amber" },
-  { key: "SLEEP",               label: "Sleep",               category: "wait", needsSelector: false, needsValue: true,  valueLabel: "milliseconds",              tone: "amber" },
+  { key: "WAIT_FOR_SELECTOR",   label: "Wait for selector",   category: "wait", needsSelector: true,  needsValue: false,                                                                                tone: "amber", iconName: "Hourglass", description: "Block until the selector becomes visible, or fail after the step timeout." },
+  { key: "WAIT_FOR_LOAD_STATE", label: "Wait for load state", category: "wait", needsSelector: false, needsValue: true,  valueLabel: "load | domcontentloaded | networkidle",                          tone: "amber", iconName: "Loader",    description: "Block until the page reaches the given load state." },
+  { key: "SLEEP",               label: "Sleep",               category: "wait", needsSelector: false, needsValue: true,  valueLabel: "milliseconds",                                                    tone: "amber", iconName: "Clock",     description: "Pause for a fixed duration. Prefer Wait actions when possible." },
 
   /* ── Assert ──────────────────────────────────────────────────────── */
-  { key: "ASSERT_VISIBLE",        label: "Verify visible",         category: "assert", needsSelector: true,  needsValue: false,                                  tone: "violet" },
-  { key: "ASSERT_HIDDEN",         label: "Verify hidden",          category: "assert", needsSelector: true,  needsValue: false,                                  tone: "violet" },
-  { key: "ASSERT_TEXT_EQUALS",    label: "Verify text equals",     category: "assert", needsSelector: true,  needsValue: true,  valueLabel: "expected text",     tone: "violet" },
-  { key: "ASSERT_TEXT_CONTAINS",  label: "Verify text contains",   category: "assert", needsSelector: true,  needsValue: true,  valueLabel: "substring",          tone: "violet" },
-  { key: "ASSERT_URL_EQUALS",     label: "Verify URL equals",      category: "assert", needsSelector: false, needsValue: true,  valueLabel: "exact URL",         tone: "violet" },
-  { key: "ASSERT_URL_CONTAINS",   label: "Verify URL contains",    category: "assert", needsSelector: false, needsValue: true,  valueLabel: "substring",          tone: "violet" },
-  { key: "ASSERT_TITLE_EQUALS",   label: "Verify title equals",    category: "assert", needsSelector: false, needsValue: true,  valueLabel: "exact title",       tone: "violet" },
-  { key: "ASSERT_TITLE_CONTAINS", label: "Verify title contains",  category: "assert", needsSelector: false, needsValue: true,  valueLabel: "substring",          tone: "violet" },
-  { key: "ASSERT_ATTRIBUTE",      label: "Verify attribute",       category: "assert", needsSelector: true,  needsValue: true,  valueLabel: "name=value",         tone: "violet" },
+  { key: "ASSERT_VISIBLE",        label: "Verify visible",         category: "assert", needsSelector: true,  needsValue: false,                                                tone: "violet", iconName: "Eye",        description: "Fail unless the matched element is visible." },
+  { key: "ASSERT_HIDDEN",         label: "Verify hidden",          category: "assert", needsSelector: true,  needsValue: false,                                                tone: "violet", iconName: "EyeOff",     description: "Fail if the matched element is currently visible." },
+  { key: "ASSERT_TEXT_EQUALS",    label: "Verify text equals",     category: "assert", needsSelector: true,  needsValue: true,  valueLabel: "expected text",                   tone: "violet", iconName: "Equal",      description: "Fail unless the element's text equals the expected value exactly." },
+  { key: "ASSERT_TEXT_CONTAINS",  label: "Verify text contains",   category: "assert", needsSelector: true,  needsValue: true,  valueLabel: "substring",                       tone: "violet", iconName: "TextSearch", description: "Fail unless the element's text contains the expected substring." },
+  { key: "ASSERT_URL_EQUALS",     label: "Verify URL equals",      category: "assert", needsSelector: false, needsValue: true,  valueLabel: "exact URL",                       tone: "violet", iconName: "Link",       description: "Fail unless the current page URL equals the expected value." },
+  { key: "ASSERT_URL_CONTAINS",   label: "Verify URL contains",    category: "assert", needsSelector: false, needsValue: true,  valueLabel: "substring",                       tone: "violet", iconName: "Link",       description: "Fail unless the URL contains the expected substring (handy for /dashboard etc.)." },
+  { key: "ASSERT_TITLE_EQUALS",   label: "Verify title equals",    category: "assert", needsSelector: false, needsValue: true,  valueLabel: "exact title",                     tone: "violet", iconName: "Heading1",   description: "Fail unless the page title equals the expected value." },
+  { key: "ASSERT_TITLE_CONTAINS", label: "Verify title contains",  category: "assert", needsSelector: false, needsValue: true,  valueLabel: "substring",                       tone: "violet", iconName: "Heading1",   description: "Fail unless the page title contains the expected substring." },
+  { key: "ASSERT_ATTRIBUTE",      label: "Verify attribute",       category: "assert", needsSelector: true,  needsValue: true,  valueLabel: "name=value",                      tone: "violet", iconName: "Hash",       description: "Fail unless an attribute on the matched element equals the expected value." },
 
   /* ── Util ────────────────────────────────────────────────────────── */
-  { key: "SCREENSHOT", label: "Screenshot", category: "util", needsSelector: false, needsValue: false,                                                            tone: "gray" },
-  { key: "COMMENT",    label: "Comment",    category: "util", needsSelector: false, needsValue: true,  valueLabel: "free-form note",                             tone: "gray" },
-  { key: "EVAL_JS",    label: "Eval JS",    category: "util", needsSelector: false, needsValue: true,  valueLabel: "JavaScript expression",                      tone: "gray" },
+  { key: "SCREENSHOT", label: "Screenshot", category: "util", needsSelector: false, needsValue: false,                                              tone: "gray", iconName: "Camera",       description: "Capture a PNG of the current page and attach it to the run." },
+  { key: "COMMENT",    label: "Comment",    category: "util", needsSelector: false, needsValue: true,  valueLabel: "free-form note",               tone: "gray", iconName: "MessageSquare", description: "Inline note — no side effect, just documentation in the run." },
+  { key: "EVAL_JS",    label: "Eval JS",    category: "util", needsSelector: false, needsValue: true,  valueLabel: "JavaScript expression",        tone: "gray", iconName: "Code2",         description: "Execute a JavaScript expression in the page context." },
 ];
 
 export const WEB_STEP_ACTION_MAP: Record<WebStepAction, WebStepActionDef> = Object.fromEntries(
