@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -70,7 +70,11 @@ export default function WebScenarioPanel({ scenarioId, onAfterDelete, onMutated 
     },
   });
 
-  const [adding, setAdding] = useState(false);
+  // addingAt holds the 0-based insert index when the user has opened a "new
+  // step" editor — null means no editor is open. Insertion at index N pushes
+  // every step previously at order≥N one slot down, so any value from 0 to
+  // steps.length is a valid drop point.
+  const [addingAt, setAddingAt] = useState<number | null>(null);
   const [editingStepId, setEditingStepId] = useState<number | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -137,14 +141,14 @@ export default function WebScenarioPanel({ scenarioId, onAfterDelete, onMutated 
       </Card>
 
       {/* ── Steps ────────────────────────────────────────────────────── */}
-      {steps.length === 0 && !adding ? (
+      {steps.length === 0 && addingAt == null ? (
         <Card>
           <EmptyState
             icon={<Plus size={20} />}
             title="No steps yet"
             description="Add the first step. You can pick an element from the repository and a value from test data."
             action={
-              <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setAdding(true)}>
+              <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setAddingAt(0)}>
                 Add step
               </Button>
             }
@@ -152,35 +156,72 @@ export default function WebScenarioPanel({ scenarioId, onAfterDelete, onMutated 
         </Card>
       ) : (
         <div className="space-y-2">
-          {steps.map((step) => (
-            <StepRow
-              key={step.id}
-              step={step}
-              isEditing={editingStepId === step.id}
-              onEdit={() => setEditingStepId(step.id)}
-              onCancelEdit={() => setEditingStepId(null)}
-              onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
-              onSubmitEdit={(b) => updateStep.mutate(
-                { stepId: step.id, b: b as WebStepUpdate },
-                { onSuccess: () => setEditingStepId(null) },
-              )}
-              busy={updateStep.isPending}
+          {/* Prepend affordance — present once there's at least one step. */}
+          {steps.length > 0 && (
+            <InsertHereLine
+              active={addingAt === 0}
+              onClick={() => setAddingAt(0)}
             />
+          )}
+          {addingAt === 0 && (
+            <NewStepCard
+              busy={addStep.isPending}
+              onCancel={() => setAddingAt(null)}
+              onSubmit={(b) => addStep.mutate(
+                { ...(b as WebStepCreate), position: 0 },
+                { onSuccess: () => setAddingAt(null) },
+              )}
+            />
+          )}
+          {steps.map((step, idx) => (
+            <Fragment key={step.id}>
+              <StepRow
+                step={step}
+                isEditing={editingStepId === step.id}
+                onEdit={() => setEditingStepId(step.id)}
+                onCancelEdit={() => setEditingStepId(null)}
+                onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
+                onSubmitEdit={(b) => updateStep.mutate(
+                  { stepId: step.id, b: b as WebStepUpdate },
+                  { onSuccess: () => setEditingStepId(null) },
+                )}
+                busy={updateStep.isPending}
+              />
+              {/* Insert-here line between step idx and idx+1 — last step uses
+                  the always-visible "Add step" pill below instead. */}
+              {idx < steps.length - 1 && (
+                <InsertHereLine
+                  active={addingAt === idx + 1}
+                  onClick={() => setAddingAt(idx + 1)}
+                />
+              )}
+              {addingAt === idx + 1 && idx < steps.length - 1 && (
+                <NewStepCard
+                  busy={addStep.isPending}
+                  onCancel={() => setAddingAt(null)}
+                  onSubmit={(b) => addStep.mutate(
+                    { ...(b as WebStepCreate), position: idx + 1 },
+                    { onSuccess: () => setAddingAt(null) },
+                  )}
+                />
+              )}
+            </Fragment>
           ))}
 
-          {adding ? (
-            <Card className="border-l-2 border-l-brand-500 bg-brand-500/5 p-3">
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-brand-300 mb-3">New step</div>
-              <StepEditor
-                busy={addStep.isPending}
-                submitLabel="Add step"
-                onCancel={() => setAdding(false)}
-                onSubmit={(b) => addStep.mutate(b as WebStepCreate, { onSuccess: () => setAdding(false) })}
-              />
-            </Card>
+          {/* Always-visible "Add step" pill at the bottom. Appends when
+              activated (position omitted = end of list). */}
+          {addingAt === steps.length ? (
+            <NewStepCard
+              busy={addStep.isPending}
+              onCancel={() => setAddingAt(null)}
+              onSubmit={(b) => addStep.mutate(
+                b as WebStepCreate,
+                { onSuccess: () => setAddingAt(null) },
+              )}
+            />
           ) : (
             <button
-              onClick={() => setAdding(true)}
+              onClick={() => setAddingAt(steps.length)}
               className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-surface-border text-ink-secondary hover:text-ink-primary hover:border-brand-500/40 hover:bg-surface-muted/40 transition-colors text-xs"
             >
               <Plus size={12} /> Add step
@@ -566,5 +607,66 @@ function ScenarioRunDialog({ scenarioId, scenarioName, onClose }: { scenarioId: 
         </div>
       </Card>
     </div>
+  );
+}
+
+/* ─────────────────────────  Insert-between affordance  ─────────────────
+ * Thin idle line that becomes a clickable "+ Insert" pill on hover. Sits
+ * between every pair of step rows (and above the first) so users can splice
+ * a new step at any position instead of only appending to the end. When
+ * `active` is true the line stays highlighted because the new-step card is
+ * rendered immediately below.
+ */
+function InsertHereLine({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group relative w-full h-3 -my-1 flex items-center justify-center",
+        "outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 rounded",
+      )}
+      title="Insert step here"
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "absolute inset-x-0 top-1/2 -translate-y-1/2 h-px transition-colors",
+          active ? "bg-brand-500/60" : "bg-transparent group-hover:bg-brand-500/40",
+        )}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          "relative inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-semibold",
+          "px-2 py-0.5 rounded-full border bg-surface transition-opacity",
+          active
+            ? "border-brand-500/60 text-brand-300 opacity-100"
+            : "border-surface-border text-ink-muted opacity-0 group-hover:opacity-100",
+        )}
+      >
+        <Plus size={10} /> Insert
+      </span>
+    </button>
+  );
+}
+
+function NewStepCard({
+  busy, onCancel, onSubmit,
+}: {
+  busy?: boolean;
+  onCancel: () => void;
+  onSubmit: (b: WebStepCreate) => void;
+}) {
+  return (
+    <Card className="border-l-2 border-l-brand-500 bg-brand-500/5 p-3">
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-brand-300 mb-3">New step</div>
+      <StepEditor
+        busy={busy ?? false}
+        submitLabel="Add step"
+        onCancel={onCancel}
+        onSubmit={(b) => onSubmit(b as WebStepCreate)}
+      />
+    </Card>
   );
 }
