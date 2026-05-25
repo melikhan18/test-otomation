@@ -90,9 +90,13 @@ while true; do
     UPT=$(uptime -p 2>/dev/null | sed 's/^up //' || echo "?")
     LOAD=$(awk '{printf "%.2f / %.2f / %.2f", $1, $2, $3}' /proc/loadavg)
 
-    printf "${B}${C}━━━ QA Platform · Live Monitor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
-    printf "  ${D}Time:${RST} %s    ${D}Host:${RST} %s    ${D}Up:${RST} %s\n" "$NOW" "$HOST" "$UPT"
-    printf "  ${D}Load:${RST} %s  ${D}(1m / 5m / 15m)${RST}\n\n" "$LOAD"
+    # `\033[K` before every `\n` erases from the cursor to end-of-line, so
+    # any leftover chars from the previous (longer) frame are wiped. Without
+    # this, "CPU 12%" overwrites "CPU 3%" but leaves the trailing "2%" or
+    # similar artefacts behind.
+    printf "${B}${C}━━━ QA Platform · Live Monitor ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n"
+    printf "  ${D}Time:${RST} %s    ${D}Host:${RST} %s    ${D}Up:${RST} %s\033[K\n" "$NOW" "$HOST" "$UPT"
+    printf "  ${D}Load:${RST} %s  ${D}(1m / 5m / 15m)${RST}\033[K\n\033[K\n" "$LOAD"
 
     # ── CPU ───────────────────────────────────────────
     read -r CPU_T1 CPU_B1 < <(read_cpu)
@@ -130,16 +134,16 @@ while true; do
 
     # ── Print the four bars ───────────────────────────
     printf "  ${B}CPU${RST}    "; bar $CPU
-    printf "  %s%3d%%%s  ${D}%d cores${RST}\n" "$(color_for $CPU)" "$CPU" "$RST" "$CORES"
+    printf "  %s%3d%%%s  ${D}%d cores${RST}\033[K\n" "$(color_for $CPU)" "$CPU" "$RST" "$CORES"
 
     printf "  ${B}RAM${RST}    "; bar $MEM
-    printf "  %s%3d%%%s  ${D}%s / %s${RST}\n" "$(color_for $MEM)" "$MEM" "$RST" "$MU_H" "$MT_H"
+    printf "  %s%3d%%%s  ${D}%s / %s${RST}\033[K\n" "$(color_for $MEM)" "$MEM" "$RST" "$MU_H" "$MT_H"
 
     printf "  ${B}Swap${RST}   "; bar $SWAP
-    printf "  %s%3d%%%s  ${D}%s / %s${RST}\n" "$(color_for $SWAP)" "$SWAP" "$RST" "$SU_H" "$ST_H"
+    printf "  %s%3d%%%s  ${D}%s / %s${RST}\033[K\n" "$(color_for $SWAP)" "$SWAP" "$RST" "$SU_H" "$ST_H"
 
     printf "  ${B}Disk${RST}   "; bar $DPC
-    printf "  %s%3d%%%s  ${D}%s / %s${RST}\n\n" "$(color_for $DPC)" "$DPC" "$RST" "$DU" "$DT_H"
+    printf "  %s%3d%%%s  ${D}%s / %s${RST}\033[K\n\033[K\n" "$(color_for $DPC)" "$DPC" "$RST" "$DU" "$DT_H"
 
     # ── Container roster ──────────────────────────────
     if command -v docker >/dev/null 2>&1; then
@@ -149,12 +153,12 @@ while true; do
         SH=$(docker ps --filter health=starting  -q 2>/dev/null | wc -l)
         NH=$(( TOTAL - H - UH - SH ))
 
-        printf "${B}${C}━━━ Containers (%d) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n" "$TOTAL"
-        printf "  healthy: ${G}%d${RST}   starting: ${Y}%d${RST}   unhealthy: ${R}%d${RST}   no-hc: ${D}%d${RST}\n\n" \
+        printf "${B}${C}━━━ Containers (%d) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n" "$TOTAL"
+        printf "  healthy: ${G}%d${RST}   starting: ${Y}%d${RST}   unhealthy: ${R}%d${RST}   no-hc: ${D}%d${RST}\033[K\n\033[K\n" \
             "$H" "$SH" "$UH" "$NH"
 
-        printf "  ${B}%-40s %7s %18s %16s${RST}\n" "NAME" "CPU%" "MEM" "NET I/O"
-        printf "  ${D}────────────────────────────────────────────────────────────────────────────────────${RST}\n"
+        printf "  ${B}%-40s %7s %18s %16s${RST}\033[K\n" "NAME" "CPU%" "MEM" "NET I/O"
+        printf "  ${D}────────────────────────────────────────────────────────────────────────────────────${RST}\033[K\n"
 
         # docker stats --no-stream samples once and returns; sort by name for stable rows.
         docker stats --no-stream \
@@ -165,15 +169,15 @@ while true; do
             CPU_VAL=${CPU_C%\%}
             CPU_INT=$(awk "BEGIN{print int($CPU_VAL+0)}" 2>/dev/null || echo 0)
             CLR=$(color_for "$CPU_INT")
-            printf "  %-40s %s%7s%s %18s %16s\n" \
+            printf "  %-40s %s%7s%s %18s %16s\033[K\n" \
                 "${NAME:0:40}" "$CLR" "$CPU_C" "$RST" "$MEM_C" "$NET_C"
         done
-        echo
+        printf '\033[K\n'
     else
-        printf "${R}  docker not available — container roster skipped${RST}\n\n"
+        printf "${R}  docker not available — container roster skipped${RST}\033[K\n\033[K\n"
     fi
 
-    printf "${D}  Refresh: ${INTERVAL}s · Ctrl+C to exit${RST}\n"
+    printf "${D}  Refresh: ${INTERVAL}s · Ctrl+C to exit${RST}\033[K\n"
 
     # Clear everything below the cursor so a shorter frame (e.g. container
     # count dropped) doesn't leave orphaned rows from the previous tick.

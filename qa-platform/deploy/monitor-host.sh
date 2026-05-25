@@ -98,12 +98,16 @@ while true; do
     UPT=$(uptime -p 2>/dev/null | sed 's/^up //' || echo "?")
     LOAD=$(awk '{printf "%.2f / %.2f / %.2f", $1, $2, $3}' /proc/loadavg)
 
-    printf "${B}${C}━━━ Host Monitor · %s ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n" "$HOST"
-    printf "  ${D}Time:${RST} %s    ${D}Up:${RST} %s\n" "$NOW" "$UPT"
-    printf "  ${D}Load:${RST} %s  ${D}(1m / 5m / 15m)${RST}\n\n" "$LOAD"
+    # `\033[K` before every `\n` erases the rest of the line, so trailing
+    # leftover characters from a previous (longer) frame don't ghost on
+    # screen. Without it, "CPU 12%" → "CPU 3%" overwrites the "1" but
+    # leaves the "2%" hanging.
+    printf "${B}${C}━━━ Host Monitor · %s ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n" "$HOST"
+    printf "  ${D}Time:${RST} %s    ${D}Up:${RST} %s\033[K\n" "$NOW" "$UPT"
+    printf "  ${D}Load:${RST} %s  ${D}(1m / 5m / 15m)${RST}\033[K\n\033[K\n" "$LOAD"
 
     # ── Aggregate CPU + per-core ──────────────────────────────────────
-    printf "${B}${C}━━━ CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
+    printf "${B}${C}━━━ CPU ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n"
     declare -A CPU_TOT_NOW CPU_BUSY_NOW
     while read -r name tot busy; do
         CPU_TOT_NOW[$name]=$tot
@@ -127,7 +131,7 @@ while true; do
     CPU_BUSY_PREV[cpu]=$AGG_BUSY
 
     printf "  ${B}all${RST}  "; bar $AGG_PCT 50
-    printf "  %s%3d%%%s\n" "$(color_for $AGG_PCT)" "$AGG_PCT" "$RST"
+    printf "  %s%3d%%%s\033[K\n" "$(color_for $AGG_PCT)" "$AGG_PCT" "$RST"
 
     # Per-core bars (sorted by index)
     for core in $(echo "${!CPU_TOT_NOW[@]}" | tr ' ' '\n' | sort -V); do
@@ -142,9 +146,9 @@ while true; do
         CPU_TOT_PREV[$core]=$tot
         CPU_BUSY_PREV[$core]=$busy
         printf "  ${D}%-4s${RST} "; bar $pct 50
-        printf "  %s%3d%%%s\n" "$(color_for $pct)" "$pct" "$RST"
+        printf "  %s%3d%%%s\033[K\n" "$(color_for $pct)" "$pct" "$RST"
     done
-    echo
+    printf '\033[K\n'
 
     # ── Memory + Swap ──────────────────────────────────────────────────
     eval "$(awk '
@@ -173,12 +177,12 @@ while true; do
         SU_H="–"; ST_H="off"
     fi
 
-    printf "${B}${C}━━━ Memory ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
+    printf "${B}${C}━━━ Memory ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n"
     printf "  ${B}RAM${RST}  "; bar $MEM 50
-    printf "  %s%3d%%%s  ${D}%s / %s${RST}\n" "$(color_for $MEM)" "$MEM" "$RST" "$MU_H" "$MT_H"
-    printf "  ${D}     free: %s   cached/buffers: %s${RST}\n" "$MFREE_H" "$MCACHE_H"
+    printf "  %s%3d%%%s  ${D}%s / %s${RST}\033[K\n" "$(color_for $MEM)" "$MEM" "$RST" "$MU_H" "$MT_H"
+    printf "  ${D}     free: %s   cached/buffers: %s${RST}\033[K\n" "$MFREE_H" "$MCACHE_H"
     printf "  ${B}Swap${RST} "; bar $SWAP 50
-    printf "  %s%3d%%%s  ${D}%s / %s${RST}\n\n" "$(color_for $SWAP)" "$SWAP" "$RST" "$SU_H" "$ST_H"
+    printf "  %s%3d%%%s  ${D}%s / %s${RST}\033[K\n\033[K\n" "$(color_for $SWAP)" "$SWAP" "$RST" "$SU_H" "$ST_H"
 
     # ── Disk + Network ─────────────────────────────────────────────────
     DSK=$(df -h / | awk 'NR==2 {print $3 "|" $2 "|" $5}')
@@ -193,24 +197,24 @@ while true; do
     TX_RATE=$(awk "BEGIN{ if ($SPAN > 0) printf \"%.0f\", ($NET_TX - $NET_TX_PREV) / $SPAN; else print 0 }")
     NET_RX_PREV=$NET_RX; NET_TX_PREV=$NET_TX; PREV_TS=$NOW_TS
 
-    printf "${B}${C}━━━ Disk + Network ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
+    printf "${B}${C}━━━ Disk + Network ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n"
     printf "  ${B}/${RST}    "; bar $DPC 50
-    printf "  %s%3d%%%s  ${D}%s / %s${RST}\n" "$(color_for $DPC)" "$DPC" "$RST" "$DU" "$DT_H"
-    printf "  ${B}Net${RST}  ↓ %s${D} rx${RST}   ↑ %s${D} tx${RST}\n\n" "$(hr_rate $RX_RATE)" "$(hr_rate $TX_RATE)"
+    printf "  %s%3d%%%s  ${D}%s / %s${RST}\033[K\n" "$(color_for $DPC)" "$DPC" "$RST" "$DU" "$DT_H"
+    printf "  ${B}Net${RST}  ↓ %s${D} rx${RST}   ↑ %s${D} tx${RST}\033[K\n\033[K\n" "$(hr_rate $RX_RATE)" "$(hr_rate $TX_RATE)"
 
     # ── Top processes ──────────────────────────────────────────────────
-    printf "${B}${C}━━━ Top Processes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
-    printf "  ${B}%-6s %-25s %7s %7s${RST}      ${D}(by CPU)${RST}\n" "PID" "COMMAND" "CPU%" "MEM%"
+    printf "${B}${C}━━━ Top Processes ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\033[K\n"
+    printf "  ${B}%-6s %-25s %7s %7s${RST}      ${D}(by CPU)${RST}\033[K\n" "PID" "COMMAND" "CPU%" "MEM%"
     ps -eo pid,comm,%cpu,%mem --sort=-%cpu --no-headers 2>/dev/null \
         | head -5 \
-        | awk '{ printf "  %-6s %-25.25s %6.1f%% %6.1f%%\n", $1, $2, $3, $4 }'
-    echo
-    printf "  ${B}%-6s %-25s %7s %7s${RST}      ${D}(by MEM)${RST}\n" "PID" "COMMAND" "CPU%" "MEM%"
+        | awk '{ printf "  %-6s %-25.25s %6.1f%% %6.1f%%\033[K\n", $1, $2, $3, $4 }'
+    printf '\033[K\n'
+    printf "  ${B}%-6s %-25s %7s %7s${RST}      ${D}(by MEM)${RST}\033[K\n" "PID" "COMMAND" "CPU%" "MEM%"
     ps -eo pid,comm,%cpu,%mem --sort=-%mem --no-headers 2>/dev/null \
         | head -5 \
-        | awk '{ printf "  %-6s %-25.25s %6.1f%% %6.1f%%\n", $1, $2, $3, $4 }'
+        | awk '{ printf "  %-6s %-25.25s %6.1f%% %6.1f%%\033[K\n", $1, $2, $3, $4 }'
 
-    printf "\n${D}  Refresh: ${INTERVAL}s · Ctrl+C to exit${RST}\n"
+    printf "\033[K\n${D}  Refresh: ${INTERVAL}s · Ctrl+C to exit${RST}\033[K\n"
 
     # Clear leftover lines from any previous (taller) frame
     printf '\033[J'
