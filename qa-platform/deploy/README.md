@@ -9,8 +9,9 @@ node) but work on any equivalent box.
 | `cleanup.sh`  | Server has leftover docker/projects from old attempts. |
 | `install.sh`  | Bootstraps everything — packages, firewall, swap, docker, build, up. |
 | `update.sh`   | After every `git push` to main — pulls + rebuilds in place. |
-| `monitor.sh`      | Live resource dashboard (CPU/RAM/Swap/Disk + per-container stats). Refresh 0.5s. |
-| `monitor-host.sh` | Host-only variant — per-core CPU, RAM, network throughput, top processes. True 0.5s refresh (no docker stats bottleneck). |
+| `monitor.sh`        | Live resource dashboard (CPU/RAM/Swap/Disk + per-container stats). Refresh 0.5s. |
+| `monitor-host.sh`   | Host-only variant — per-core CPU, RAM, network throughput, top processes. True 0.5s refresh (no docker stats bottleneck). |
+| `monitor-simple.sh` | Stripped-down host monitor — six lines, just colored numbers. Anchored at fixed terminal coordinates so it never appears to "overwrite" the previous frame. |
 
 All three are **idempotent** (safe to re-run) and **non-destructive of
 data** unless you explicitly ask for cleanup.
