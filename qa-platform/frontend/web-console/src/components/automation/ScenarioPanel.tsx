@@ -433,6 +433,7 @@ function describeStep(st: StepView): string {
   const el = st.targetElement?.name ? `"${st.targetElement.name}"` : "(no element)";
   const v = () => st.data?.name ? `"${st.data.name}"` : JSON.stringify(st.literalValue ?? "");
   switch (st.action) {
+    case "IF":                   return st.condition ? `if ${describeIfCondition(st.condition)}` : `if (no condition)`;
     case "CLICK":                return `tap ${el}`;
     case "LONG_PRESS":           return `long press ${el}` + (st.literalValue ? ` for ${st.literalValue}ms` : "");
     case "SWIPE":                return `swipe ${el}` + (st.literalValue ? ` ${st.literalValue}` : "");
@@ -463,6 +464,31 @@ function describeStep(st: StepView): string {
     case "SCREENSHOT":           return `screenshot "${st.literalValue ?? ""}"`;
     case "COMMENT":              return `# ${st.literalValue ?? ""}`;
   }
+}
+
+/** Pseudocode-friendly rendering of an IF predicate. */
+function describeIfCondition(c: NonNullable<StepView["condition"]>): string {
+  if (c.type === "element_state") {
+    const op =
+      c.operator === "is_visible"    ? "is visible"
+    : c.operator === "is_hidden"     ? "is hidden"
+    : c.operator === "exists"        ? "exists"
+    : c.operator === "text_contains" ? `text contains "${c.value ?? ""}"`
+    : c.operator === "text_equals"   ? `text equals "${c.value ?? ""}"`
+    :                                  c.operator;
+    return `element #${c.subjectId} ${op}`;
+  }
+  if (c.type === "test_data_compare") {
+    const op =
+      c.operator === "equals"        ? "=="
+    : c.operator === "not_equals"    ? "!="
+    : c.operator === "contains"      ? "contains"
+    : c.operator === "greater_than"  ? ">"
+    : c.operator === "less_than"     ? "<"
+    :                                  c.operator;
+    return `data #${c.subjectId} ${op} "${c.value}"`;
+  }
+  return "(unknown condition)";
 }
 
 function ScenarioMetaEditor({

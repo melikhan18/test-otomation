@@ -104,6 +104,8 @@ export const testDataApi = {
 /* ─────────────────────────  Scenarios + Steps  ─────────────────────── */
 
 export type StepAction =
+  // control flow — IF is a tree node, children live in then/else branches.
+  | "IF"
   // touch + input
   | "CLICK" | "LONG_PRESS" | "SWIPE" | "ENTER_TEXT" | "CLEAR" | "PRESS_KEY"
   // wait
@@ -119,6 +121,21 @@ export type StepAction =
   | "ASSERT_VALUE_EQUALS" | "ASSERT_ATTRIBUTE"
   // util
   | "SCREENSHOT" | "COMMENT";
+
+/** Predicate carried by an IF step. Mirrors backend StepCondition. */
+export type StepCondition =
+  | {
+      type: "element_state";
+      subjectId: number;
+      operator: "is_visible" | "is_hidden" | "exists" | "text_contains" | "text_equals";
+      value: string | null;
+    }
+  | {
+      type: "test_data_compare";
+      subjectId: number;
+      operator: "equals" | "not_equals" | "contains" | "greater_than" | "less_than";
+      value: string;
+    };
 
 export type ElementRef = {
   id: number;
@@ -148,6 +165,14 @@ export type StepView = {
   timeoutMs: number;
   retryCount: number;
   screenshotAfter: boolean;
+  /** Tree position. Both null = root level (legacy/flat scenarios).
+   *  Both set = step lives inside an IF's then/else branch. */
+  parentStepId: number | null;
+  branchLabel: "then" | "else" | null;
+  /** Only populated when action === "IF". */
+  condition: StepCondition | null;
+  /** Children — only IF rows have populated arrays; leaf actions are []. */
+  children: StepView[];
   createdAt: string;
 };
 
@@ -200,10 +225,15 @@ export type StepCreate = {
   timeoutMs?: number | null;
   retryCount?: number | null;
   screenshotAfter?: boolean | null;
-  /** Insertion index. Omit to append at end. */
+  /** Insertion index within the target scope; omit to append. */
   position?: number | null;
+  /** Tree position. Both null = root. Both set = inside IF branch. */
+  parentStepId?: number | null;
+  branchLabel?: "then" | "else" | null;
+  /** Required when action === "IF"; rejected otherwise. */
+  condition?: StepCondition | null;
 };
-export type StepUpdate = Omit<StepCreate, "position">;
+export type StepUpdate = Omit<StepCreate, "position" | "parentStepId" | "branchLabel">;
 
 export const scenarioApi = {
   list:   () => api.get<ScenarioSummary[]>("/api/automation/scenarios").then((r) => r.data),
@@ -541,7 +571,7 @@ export const suiteApi = {
 export type StepActionDef = {
   key: StepAction;
   label: string;
-  category: "touch" | "input" | "wait" | "assert" | "util";
+  category: "control" | "touch" | "input" | "wait" | "assert" | "util";
   needsElement: boolean;
   /** "none" | "data-or-literal" | "literal-only" */
   value: "none" | "data-or-literal" | "literal-only";
@@ -561,6 +591,7 @@ export type StepActionDef = {
 /** Whitelist of icons the picker is allowed to render. Keeps the bundle
  *  small (only these get tree-shaken in) and the lib pure-data. */
 export type StepActionIconName =
+  | "GitBranch"
   | "MousePointerClick" | "Hand" | "ArrowLeftRight" | "Keyboard" | "Eraser" | "KeyRound"
   | "Hourglass" | "EyeOff" | "Clock"
   | "Eye" | "CircleSlash" | "ToggleRight" | "Ban" | "CheckSquare" | "Square" | "CircleDot" | "Target"
@@ -568,6 +599,9 @@ export type StepActionIconName =
   | "Camera" | "MessageSquare";
 
 export const STEP_ACTIONS: StepActionDef[] = [
+  /* ─────────────  Control flow  ───────────── */
+  { key: "IF", label: "If…", category: "control", needsElement: false, value: "none", tone: "amber", iconName: "GitBranch", description: "Branch: run children inside 'then' when the condition holds, otherwise 'else'." },
+
   /* ─────────────  Touch + Input  ───────────── */
   { key: "CLICK",                label: "Click",                category: "touch",  needsElement: true,  value: "none",            tone: "blue",   iconName: "MousePointerClick", description: "Tap the target element once." },
   { key: "LONG_PRESS",           label: "Long press",           category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "duration ms (default 1000)", tone: "blue", iconName: "Hand", description: "Touch and hold the element for the given duration." },
