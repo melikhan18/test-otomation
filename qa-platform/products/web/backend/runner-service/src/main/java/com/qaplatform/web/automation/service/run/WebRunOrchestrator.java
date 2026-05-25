@@ -23,6 +23,7 @@ import com.qaplatform.web.automation.domain.WebRunEntity;
 import com.qaplatform.web.automation.domain.WebRunRepository;
 import com.qaplatform.web.automation.domain.WebScenarioEntity;
 import com.qaplatform.web.automation.domain.WebScenarioRepository;
+import com.qaplatform.web.automation.domain.WebStepAction;
 import com.qaplatform.web.automation.domain.WebStepEntity;
 import com.qaplatform.web.automation.domain.WebStepRepository;
 import com.qaplatform.web.automation.domain.WebStepResultEntity;
@@ -30,6 +31,7 @@ import com.qaplatform.web.automation.domain.WebStepResultRepository;
 import com.qaplatform.web.automation.service.run.runengine.ObjectStorageArtifactSink;
 import com.qaplatform.web.automation.service.run.runengine.Slf4jRunLogStream;
 import com.qaplatform.web.automation.service.run.runengine.StepEntityRunStep;
+import com.qaplatform.web.automation.service.run.runengine.WebConditionEvaluator;
 import com.qaplatform.web.automation.service.run.runengine.WebStepExecutor;
 import com.qaplatform.web.automation.service.storage.ObjectStorage;
 import com.qaplatform.web.automation.tenancy.ProjectLookup;
@@ -93,6 +95,7 @@ public class WebRunOrchestrator {
     private final ProjectLookup projectLookup;
     private final WebReportsPublisher reportsPublisher;
     private final WebStepExecutor stepExecutorFactory;
+    private final WebConditionEvaluator conditionEvaluator;
     private final boolean headless;
     private final int defaultStepTimeoutMs;
     private final Path runsTmpDir;
@@ -106,6 +109,7 @@ public class WebRunOrchestrator {
                               ProjectLookup projectLookup,
                               WebReportsPublisher reportsPublisher,
                               WebStepExecutor stepExecutorFactory,
+                              WebConditionEvaluator conditionEvaluator,
                               @Value("${app.browser.headless:true}") boolean headless,
                               @Value("${app.browser.step-timeout-ms:30000}") int defaultStepTimeoutMs,
                               @Value("${app.runs-tmp-dir:/tmp/qa-platform-web-runs}") String runsTmpDir) {
@@ -118,6 +122,7 @@ public class WebRunOrchestrator {
         this.projectLookup = projectLookup;
         this.reportsPublisher = reportsPublisher;
         this.stepExecutorFactory = stepExecutorFactory;
+        this.conditionEvaluator = conditionEvaluator;
         this.headless = headless;
         this.defaultStepTimeoutMs = defaultStepTimeoutMs;
         this.runsTmpDir = Paths.get(runsTmpDir);
@@ -218,46 +223,27 @@ public class WebRunOrchestrator {
                 Page page = ctx.newPage();
                 StepExecutor executor = stepExecutorFactory.forRun(page, defaultStepTimeoutMs);
 
+                // Results are pre-populated for EVERY step in the scenario tree
+                // (IF rows + both branches' children). Steps in the un-taken
+                // branch stay PENDING through the walk and get marked SKIPPED
+                // at the end. Result rows are keyed by step id, not by
+                // position, so we can find them regardless of execution order.
                 List<WebStepResultEntity> placeholders = stepResults.findAllByRunIdOrderByOrderIndexAsc(runId);
-                for (int i = 0; i < plan.size(); i++) {
-                    WebStepEntity step = plan.get(i);
-                    WebStepResultEntity row = placeholders.get(i);
+                java.util.Map<Long, WebStepResultEntity> resultByStepId = new java.util.HashMap<>();
+                for (WebStepResultEntity r : placeholders) {
+                    if (r.getStepId() != null) resultByStepId.put(r.getStepId(), r);
+                }
 
-                    row.setStatus(StepResultStatus.RUNNING);
-                    row.setStartedAt(Instant.now());
-                    stepResults.save(row);
+                List<WebStepEntity> rootSteps = steps.findRootStepsByScenarioId(scenario.getId());
+                anyFailure = executeBlock(rootSteps, resultByStepId, executor, stepContext,
+                        page, run.getEnvironment(), runId);
 
-                    long startedAtMs = System.currentTimeMillis();
-                    StepOutcome outcome = executor.execute(StepEntityRunStep.of(step), stepContext);
-                    int durationMs = (int) (System.currentTimeMillis() - startedAtMs);
-
-                    row.setStatus(outcome.status());
-                    row.setFinishedAt(Instant.now());
-                    row.setDurationMs(durationMs);
-                    row.setErrorMessage(outcome.errorMessage());
-
-                    if (outcome.status() == StepResultStatus.FAILED || outcome.status() == StepResultStatus.ERROR) {
-                        try {
-                            byte[] png = page.screenshot();
-                            String url = storage.uploadScreenshot(
-                                    "runs/" + runId + "/step-" + row.getId() + "-" + System.currentTimeMillis() + ".png",
-                                    png);
-                            if (url != null) row.setScreenshotUrl(url);
-                        } catch (Exception sx) {
-                            log.warn("run {} step {} screenshot capture failed: {}", runId, row.getId(), sx.getMessage());
-                        }
-                    }
-                    stepResults.save(row);
-
-                    if (outcome.status() != StepResultStatus.PASSED) {
-                        anyFailure = true;
-                        // mark remaining as SKIPPED so the report is accurate
-                        for (int j = i + 1; j < placeholders.size(); j++) {
-                            WebStepResultEntity skip = placeholders.get(j);
-                            skip.setStatus(StepResultStatus.SKIPPED);
-                            stepResults.save(skip);
-                        }
-                        break;
+                // Any placeholder left in PENDING was inside a branch the IF
+                // didn't pick. Mark SKIPPED so the report is accurate.
+                for (WebStepResultEntity ph : placeholders) {
+                    if (ph.getStatus() == StepResultStatus.PENDING) {
+                        ph.setStatus(StepResultStatus.SKIPPED);
+                        stepResults.save(ph);
                     }
                 }
 
@@ -302,6 +288,101 @@ public class WebRunOrchestrator {
             case "webkit"   -> pw.webkit();
             default -> throw ApiException.badRequest("unsupported browser engine: " + engine);
         };
+    }
+
+    /* ─────────────────────── tree walker ───────────────────────────────── */
+
+    /**
+     * Executes a block of steps (root scenario or one branch of an IF) in
+     * order. Returns true if any step in this subtree failed — caller stops
+     * walking further siblings on the first failure.
+     *
+     * <p>For an {@code IF} step the walker evaluates the condition, records
+     * the IF row as PASSED or ERROR, then recurses into whichever branch
+     * the condition selected. The un-selected branch's children stay in
+     * PENDING and get swept to SKIPPED after the whole walk finishes —
+     * which keeps report counts accurate even for deeply nested ifs.</p>
+     */
+    private boolean executeBlock(List<WebStepEntity> block,
+                                 java.util.Map<Long, WebStepResultEntity> resultByStepId,
+                                 com.qaplatform.common.runengine.spi.StepExecutor executor,
+                                 com.qaplatform.common.runengine.spi.StepContext stepContext,
+                                 com.microsoft.playwright.Page page,
+                                 String environment,
+                                 long runId) {
+        for (WebStepEntity step : block) {
+            WebStepResultEntity row = resultByStepId.get(step.getId());
+            if (row == null) {
+                // Shouldn't happen — every step was pre-populated. Log and continue
+                // so the run finishes, but flag the bug.
+                log.warn("run {} step {} has no result row — skipping", runId, step.getId());
+                continue;
+            }
+
+            if (step.getAction() == WebStepAction.IF) {
+                boolean condResult;
+                long start = System.currentTimeMillis();
+                row.setStatus(StepResultStatus.RUNNING);
+                row.setStartedAt(Instant.now());
+                stepResults.save(row);
+                try {
+                    condResult = conditionEvaluator.evaluate(step.getConditionJson(), page, environment);
+                } catch (Exception e) {
+                    log.warn("run {} IF step {} evaluation failed: {}", runId, step.getId(), e.getMessage());
+                    row.setStatus(StepResultStatus.ERROR);
+                    row.setErrorMessage("IF condition: " + e.getMessage());
+                    row.setFinishedAt(Instant.now());
+                    row.setDurationMs((int) (System.currentTimeMillis() - start));
+                    stepResults.save(row);
+                    return true;
+                }
+                row.setStatus(StepResultStatus.PASSED);
+                row.setFinishedAt(Instant.now());
+                row.setDurationMs((int) (System.currentTimeMillis() - start));
+                stepResults.save(row);
+
+                String pickedBranch = condResult ? "then" : "else";
+                List<WebStepEntity> branchKids = steps
+                        .findAllByParentStepIdAndBranchLabelOrderByOrderIndexAsc(step.getId(), pickedBranch);
+                if (executeBlock(branchKids, resultByStepId, executor, stepContext, page, environment, runId)) {
+                    return true;
+                }
+                continue;
+            }
+
+            // Regular leaf step — same logic as the old flat loop.
+            row.setStatus(StepResultStatus.RUNNING);
+            row.setStartedAt(Instant.now());
+            stepResults.save(row);
+
+            long startedAtMs = System.currentTimeMillis();
+            com.qaplatform.common.runengine.spi.StepOutcome outcome =
+                    executor.execute(StepEntityRunStep.of(step), stepContext);
+            int durationMs = (int) (System.currentTimeMillis() - startedAtMs);
+
+            row.setStatus(outcome.status());
+            row.setFinishedAt(Instant.now());
+            row.setDurationMs(durationMs);
+            row.setErrorMessage(outcome.errorMessage());
+
+            if (outcome.status() == StepResultStatus.FAILED || outcome.status() == StepResultStatus.ERROR) {
+                try {
+                    byte[] png = page.screenshot();
+                    String url = storage.uploadScreenshot(
+                            "runs/" + runId + "/step-" + row.getId() + "-" + System.currentTimeMillis() + ".png",
+                            png);
+                    if (url != null) row.setScreenshotUrl(url);
+                } catch (Exception sx) {
+                    log.warn("run {} step {} screenshot capture failed: {}", runId, row.getId(), sx.getMessage());
+                }
+            }
+            stepResults.save(row);
+
+            if (outcome.status() != StepResultStatus.PASSED) {
+                return true;   // stop the walk, caller handles SKIPPED sweep
+            }
+        }
+        return false;
     }
 
     @FunctionalInterface

@@ -1,10 +1,12 @@
 package com.qaplatform.web.automation.api.dto;
 
 import com.qaplatform.web.automation.domain.WebStepAction;
+import com.qaplatform.web.automation.domain.WebStepCondition;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
@@ -43,6 +45,12 @@ public class WebScenarioDtos {
             int version,
             Instant createdAt,
             Instant updatedAt,
+            /**
+             * Root-level steps of the scenario. Each step's {@link StepView#children}
+             * holds nested children (only populated for {@code action = IF}); the
+             * frontend renders the tree recursively. Empty for scenarios with no
+             * conditional blocks.
+             */
             List<StepView> steps
     ) {}
 
@@ -58,8 +66,23 @@ public class WebScenarioDtos {
             Long dataId,
             @Min(0) Integer timeoutMs,
             Boolean screenshotAfter,
-            /** Insertion index (0-based). When null → append at end. */
-            Integer position
+            /**
+             * Insertion index (0-based) within the target branch / root. Null →
+             * append at the end of that scope.
+             */
+            Integer position,
+            /**
+             * Tree-position: which IF step this new row should hang under, and
+             * inside which branch. Both null = root-level (the original behaviour
+             * for flat scenarios).
+             */
+            Long parentStepId,
+            @Pattern(regexp = "then|else") String branchLabel,
+            /**
+             * Predicate JSON; only valid (and required) when {@link #action} is
+             * {@link WebStepAction#IF}. Service will reject mismatches.
+             */
+            @Valid WebStepCondition condition
     ) {}
 
     public record StepUpdateRequest(
@@ -69,11 +92,19 @@ public class WebScenarioDtos {
             Long targetElementId,
             Long dataId,
             @Min(0) Integer timeoutMs,
-            Boolean screenshotAfter
+            Boolean screenshotAfter,
+            /** Update the IF predicate. Ignored for non-IF actions. */
+            @Valid WebStepCondition condition
     ) {}
 
     public record ReorderRequest(@NotNull @Valid List<@NotNull Long> stepIds) {}
 
+    /**
+     * Recursive — {@link #children} is only populated for {@code IF} steps,
+     * and itself is the union of "then" + "else" branch members (each child
+     * carries its own {@link #branchLabel} so the renderer can split them
+     * into two lanes).
+     */
     public record StepView(
             long id,
             long scenarioId,
@@ -85,6 +116,10 @@ public class WebScenarioDtos {
             Long dataId,
             int timeoutMs,
             boolean screenshotAfter,
+            Long parentStepId,
+            String branchLabel,
+            WebStepCondition condition,
+            List<StepView> children,
             Instant createdAt
     ) {}
 }

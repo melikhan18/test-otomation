@@ -12,6 +12,7 @@ package com.qaplatform.web.automation.domain;
  * <p>Categories (mirrors {@code WebStepExecutor.categoryOf} dispatch):</p>
  *
  * <ul>
+ *   <li><strong>Control</strong> — branching primitives that wrap child steps (IF)</li>
  *   <li><strong>Navigation</strong> — change the page's URL / history</li>
  *   <li><strong>Interaction</strong> — pointer + keyboard input on a locator</li>
  *   <li><strong>Wait</strong> — bounded delays + readiness checks</li>
@@ -20,6 +21,12 @@ package com.qaplatform.web.automation.domain;
  * </ul>
  */
 public enum WebStepAction {
+    // Control flow. An IF step is a tree node, not a leaf: it carries a
+    // {@code condition} JSON and acts as the parent of its child steps,
+    // which live under branch_label = "then" or "else". ELSE is NOT a
+    // standalone action — it's a branch label on an IF's children.
+    IF,
+
     // Navigation
     GOTO,
     RELOAD,

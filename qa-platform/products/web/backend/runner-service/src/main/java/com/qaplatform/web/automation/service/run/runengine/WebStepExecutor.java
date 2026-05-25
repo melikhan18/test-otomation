@@ -138,6 +138,13 @@ public class WebStepExecutor {
 
     private StepOutcome dispatch(Page page, WebStepEntity step, ResolvedStep r, int timeoutMs) {
         return switch (step.getAction()) {
+            // ── Control flow ─────────────────────────────────────────────
+            // IF is handled by the orchestrator's tree walker (it picks the
+            // branch and recurses). It shouldn't reach the leaf executor at
+            // all — if it does, treat as a no-op PASS so we don't fail the
+            // run on a programmer mistake.
+            case IF           -> StepOutcome.passed(null);
+
             // ── Navigation ───────────────────────────────────────────────
             case GOTO         -> { page.navigate(req("value", r.value())); yield StepOutcome.passed(r.value()); }
             case RELOAD       -> { page.reload(); yield StepOutcome.passed(null); }
