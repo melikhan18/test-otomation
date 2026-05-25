@@ -9,7 +9,8 @@ import {
 } from "@dnd-kit/sortable";
 import { restrictToVerticalAxis, restrictToParentElement } from "@dnd-kit/modifiers";
 import {
-  AlertTriangle, FileCheck2, FolderKanban, History, Link2, Pencil, Play, Plus, Trash2,
+  AlertTriangle, ChevronDown, ChevronRight, FileCheck2, FolderKanban, GitBranch,
+  History, Link2, Pencil, Play, Plus, Trash2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +33,22 @@ type Props = {
   /** Click on a parent-suite chip jumps the workspace selection to that suite. */
   onSelectSuite?: (suiteId: number) => void;
 };
+
+/** Identifies WHERE in the step tree the user is about to insert. Both
+ *  parentId + branch null = root level. Both set = inside an IF's then/else
+ *  lane. position is the order_index within that scope. */
+type InsertSlot = {
+  parentId: number | null;
+  branch: "then" | "else" | null;
+  position: number;
+};
+
+function sameSlot(
+  a: InsertSlot | null,
+  b: { parentId: number | null; branch: "then" | "else" | null; position: number },
+): boolean {
+  return a != null && a.parentId === b.parentId && a.branch === b.branch && a.position === b.position;
+}
 
 export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, onSelectSuite }: Props) {
   const qc = useQueryClient();
@@ -80,11 +97,11 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["automation-workspace-tree"] }); onAfterDelete(); },
   });
 
-  // addingAt holds the 0-based insert index when the user has opened a "new
-  // step" editor — null means no editor is open. Insertion at index N pushes
-  // every step previously at order≥N one slot down, so any number from 0 to
-  // steps.length is a valid drop point.
-  const [addingAt, setAddingAt] = useState<number | null>(null);
+  // Scope-aware insert slot for the tree editor. Tracks WHICH branch the
+  // user is currently inserting into and at WHAT position within that
+  // branch. parentId + branch both null = root level (legacy/flat scenario
+  // behaviour). Both set = inside an IF's then/else lane.
+  const [addingAt, setAddingAt] = useState<InsertSlot | null>(null);
   const [editingStepId, setEditingStepId] = useState<number | null>(null);
   const [editingMeta, setEditingMeta] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -103,16 +120,9 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  function onDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const oldIndex = steps.findIndex((s) => s.id === active.id);
-    const newIndex = steps.findIndex((s) => s.id === over.id);
-    if (oldIndex < 0 || newIndex < 0) return;
-    const reordered = arrayMove(steps, oldIndex, newIndex).map((s, i) => ({ ...s, orderIndex: i }));
-    setLocalSteps(reordered);
-    reorder.mutate(reordered.map((s) => s.id));
-  }
+  // Per-branch drag-and-drop is handled inside StepListSection — each
+  // branch wraps its own DndContext + SortableContext so a step can't
+  // drag across the IF boundary by accident.
 
   if (scenarioQ.isLoading) return <div className="p-6 text-ink-muted flex items-center gap-2 text-sm"><Spinner /> Loading scenario…</div>;
   if (scenarioQ.error || !scenarioQ.data) return <div className="p-6 text-danger-500">Scenario not found</div>;
@@ -204,116 +214,31 @@ export default function ScenarioPanel({ scenarioId, onAfterDelete, onMutated, on
               title="No steps yet"
               description="Add the first step. You can pick an element from the repository and a value from test data."
               action={
-                <Button variant="primary" size="sm" leftIcon={<Plus size={14} />} onClick={() => setAddingAt(0)}>
+                <Button variant="primary" size="sm" leftIcon={<Plus size={14} />}
+                        onClick={() => setAddingAt({ parentId: null, branch: null, position: 0 })}>
                   Add step
                 </Button>
               }
             />
           </Card>
         ) : (
-          <div className="space-y-2">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}>
-              <SortableContext items={steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                {/* Insert-here line above the first step. Hidden when steps is
-                    empty (the EmptyState card above takes over) but always
-                    present when there's at least one step so users can prepend. */}
-                {steps.length > 0 && (
-                  <InsertHereLine
-                    active={addingAt === 0}
-                    onClick={() => setAddingAt(0)}
-                  />
-                )}
-                {addingAt === 0 && (
-                  <NewStepCard
-                    busy={addStep.isPending}
-                    elements={elementsQ.data ?? []}
-                    testData={dataQ.data ?? []}
-                    onCancel={() => setAddingAt(null)}
-                    onSubmit={(b) => addStep.mutate(
-                      { ...(b as StepCreate), position: 0 },
-                      { onSuccess: () => setAddingAt(null) },
-                    )}
-                  />
-                )}
-                {steps.map((step, idx) => (
-                  <Fragment key={step.id}>
-                    <StepCard
-                      step={step}
-                      isEditing={editingStepId === step.id}
-                      onEdit={() => setEditingStepId(step.id)}
-                      onCancelEdit={() => setEditingStepId(null)}
-                      onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
-                      editForm={
-                        <StepEditor
-                          initial={{
-                            action: step.action,
-                            targetElementId: step.targetElement?.id ?? null,
-                            dataId: step.data?.id ?? null,
-                            literalValue: step.literalValue,
-                            expectedResult: step.expectedResult,
-                            timeoutMs: step.timeoutMs,
-                            retryCount: step.retryCount,
-                            screenshotAfter: step.screenshotAfter,
-                          }}
-                          elements={elementsQ.data ?? []}
-                          testData={dataQ.data ?? []}
-                          busy={updateStep.isPending}
-                          submitLabel="Save"
-                          onCancel={() => setEditingStepId(null)}
-                          onSubmit={(b) => updateStep.mutate({ stepId: step.id, b: b as StepUpdate },
-                            { onSuccess: () => setEditingStepId(null) })}
-                        />
-                      }
-                    />
-                    {/* Insert-here line below each step. Index is idx+1 because
-                        inserting "after step at position idx" pushes everything
-                        at idx+1 onward one slot down. */}
-                    {idx < steps.length - 1 && (
-                      <InsertHereLine
-                        active={addingAt === idx + 1}
-                        onClick={() => setAddingAt(idx + 1)}
-                      />
-                    )}
-                    {addingAt === idx + 1 && idx < steps.length - 1 && (
-                      <NewStepCard
-                        busy={addStep.isPending}
-                        elements={elementsQ.data ?? []}
-                        testData={dataQ.data ?? []}
-                        onCancel={() => setAddingAt(null)}
-                        onSubmit={(b) => addStep.mutate(
-                          { ...(b as StepCreate), position: idx + 1 },
-                          { onSuccess: () => setAddingAt(null) },
-                        )}
-                      />
-                    )}
-                  </Fragment>
-                ))}
-              </SortableContext>
-            </DndContext>
-
-            {/* "Add step" pill — always visible at the bottom; activates the
-                editor at the end of the list. */}
-            {addingAt === steps.length ? (
-              <NewStepCard
-                busy={addStep.isPending}
-                elements={elementsQ.data ?? []}
-                testData={dataQ.data ?? []}
-                onCancel={() => setAddingAt(null)}
-                onSubmit={(b) => addStep.mutate(
-                  b as StepCreate, // position omitted = append
-                  { onSuccess: () => setAddingAt(null) },
-                )}
-              />
-            ) : (
-              <button
-                onClick={() => setAddingAt(steps.length)}
-                className="w-full h-10 rounded-md border border-dashed border-surface-border text-ink-secondary hover:text-ink-primary hover:border-brand-500/40 hover:bg-surface-muted/40 transition-colors text-xs inline-flex items-center justify-center gap-1.5"
-              >
-                <Plus size={13} /> Add step
-              </button>
-            )}
-          </div>
+          <StepListSection
+            steps={steps}
+            parentId={null}
+            branch={null}
+            addingAt={addingAt}
+            setAddingAt={setAddingAt}
+            editingStepId={editingStepId}
+            setEditingStepId={setEditingStepId}
+            addStep={addStep}
+            updateStep={updateStep}
+            deleteStep={deleteStep}
+            reorder={reorder}
+            setLocalSteps={setLocalSteps}
+            sensors={sensors}
+            elements={elementsQ.data ?? []}
+            testData={dataQ.data ?? []}
+          />
         )}
       </div>
 
@@ -609,6 +534,340 @@ function NewStepCard({
         onCancel={onCancel}
         onSubmit={(b) => onSubmit(b as StepCreate)}
       />
+    </Card>
+  );
+}
+
+/* ─────────────────────────  Recursive step list  ─────────────────────── */
+
+type StepListMutations = {
+  addStep:    ReturnType<typeof useMutation<ScenarioView, Error, StepCreate>>;
+  updateStep: ReturnType<typeof useMutation<ScenarioView, Error, { stepId: number; b: StepUpdate }>>;
+  deleteStep: ReturnType<typeof useMutation<ScenarioView, Error, number>>;
+  reorder:    ReturnType<typeof useMutation<ScenarioView, Error, number[]>>;
+};
+
+/**
+ * Renders one block of steps (root scenario body, or one branch of an IF).
+ * Each section owns its own DndContext + SortableContext so DnD can't
+ * cross the branch boundary — dnd-kit prevents drops into another
+ * context's items entirely. IF rows render an IfStepCard which itself
+ * contains two StepListSection instances (one per branch).
+ */
+function StepListSection({
+  steps, parentId, branch,
+  addingAt, setAddingAt, editingStepId, setEditingStepId,
+  addStep, updateStep, deleteStep, reorder,
+  setLocalSteps,
+  sensors,
+  elements, testData,
+}: {
+  steps: StepView[];
+  parentId: number | null;
+  branch: "then" | "else" | null;
+  addingAt: InsertSlot | null;
+  setAddingAt: (s: InsertSlot | null) => void;
+  editingStepId: number | null;
+  setEditingStepId: (id: number | null) => void;
+  setLocalSteps: (s: StepView[] | null) => void;
+  sensors: ReturnType<typeof useSensors>;
+  elements: any[];
+  testData: any[];
+} & StepListMutations) {
+  const slot = (position: number) => ({ parentId, branch, position });
+
+  // Branch-scoped drag-and-drop. arrayMove + reorder.mutate operate on
+  // THIS branch's siblings only — dnd-kit's SortableContext owns the
+  // items array so over.id is guaranteed to be in this scope.
+  function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = steps.findIndex((s) => s.id === active.id);
+    const newIndex = steps.findIndex((s) => s.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(steps, oldIndex, newIndex);
+    // Optimistic UI: paint the new order immediately, then let the
+    // mutation reconcile. (Only the root-level setLocalSteps fires;
+    // nested branches re-fetch via the scenario query on success.)
+    if (parentId == null) {
+      setLocalSteps(reordered.map((s, i) => ({ ...s, orderIndex: i })));
+    }
+    reorder.mutate(reordered.map((s) => s.id));
+  }
+
+  return (
+    <div className="space-y-2">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}
+                  modifiers={[restrictToVerticalAxis, restrictToParentElement]}>
+        <SortableContext items={steps.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+          {/* Prepend insert-here line — only when there's at least one step.
+              When empty, the bottom "Add step" pill covers position 0. */}
+          {steps.length > 0 && (
+            <>
+              <InsertHereLine
+                active={sameSlot(addingAt, slot(0))}
+                onClick={() => setAddingAt(slot(0))}
+              />
+              {sameSlot(addingAt, slot(0)) && (
+                <NewStepCard
+                  busy={addStep.isPending}
+                  elements={elements}
+                  testData={testData}
+                  onCancel={() => setAddingAt(null)}
+                  onSubmit={(b) => addStep.mutate(
+                    { ...b, position: 0, parentStepId: parentId, branchLabel: branch },
+                    { onSuccess: () => setAddingAt(null) },
+                  )}
+                />
+              )}
+            </>
+          )}
+          {steps.map((step, idx) => (
+            <Fragment key={step.id}>
+              {step.action === "IF" ? (
+                <IfStepCard
+                  step={step}
+                  isEditingMeta={editingStepId === step.id}
+                  onEditMeta={() => setEditingStepId(step.id)}
+                  onCancelEditMeta={() => setEditingStepId(null)}
+                  onDelete={() => { if (confirm(`Delete IF block (and its children)?`)) deleteStep.mutate(step.id); }}
+                  onSubmitMeta={(b) => updateStep.mutate(
+                    { stepId: step.id, b: b as StepUpdate },
+                    { onSuccess: () => setEditingStepId(null) },
+                  )}
+                  addingAt={addingAt}
+                  setAddingAt={setAddingAt}
+                  editingStepId={editingStepId}
+                  setEditingStepId={setEditingStepId}
+                  addStep={addStep}
+                  updateStep={updateStep}
+                  deleteStep={deleteStep}
+                  reorder={reorder}
+                  setLocalSteps={setLocalSteps}
+                  sensors={sensors}
+                  elements={elements}
+                  testData={testData}
+                />
+              ) : (
+                <StepCard
+                  step={step}
+                  isEditing={editingStepId === step.id}
+                  onEdit={() => setEditingStepId(step.id)}
+                  onCancelEdit={() => setEditingStepId(null)}
+                  onDelete={() => { if (confirm(`Delete step #${step.orderIndex + 1}?`)) deleteStep.mutate(step.id); }}
+                  editForm={
+                    <StepEditor
+                      initial={{
+                        action: step.action,
+                        targetElementId: step.targetElement?.id ?? null,
+                        dataId: step.data?.id ?? null,
+                        literalValue: step.literalValue,
+                        expectedResult: step.expectedResult,
+                        timeoutMs: step.timeoutMs,
+                        retryCount: step.retryCount,
+                        screenshotAfter: step.screenshotAfter,
+                      }}
+                      elements={elements}
+                      testData={testData}
+                      busy={updateStep.isPending}
+                      submitLabel="Save"
+                      onCancel={() => setEditingStepId(null)}
+                      onSubmit={(b) => updateStep.mutate(
+                        { stepId: step.id, b: b as StepUpdate },
+                        { onSuccess: () => setEditingStepId(null) },
+                      )}
+                    />
+                  }
+                />
+              )}
+              {idx < steps.length - 1 && (
+                <InsertHereLine
+                  active={sameSlot(addingAt, slot(idx + 1))}
+                  onClick={() => setAddingAt(slot(idx + 1))}
+                />
+              )}
+              {sameSlot(addingAt, slot(idx + 1)) && idx < steps.length - 1 && (
+                <NewStepCard
+                  busy={addStep.isPending}
+                  elements={elements}
+                  testData={testData}
+                  onCancel={() => setAddingAt(null)}
+                  onSubmit={(b) => addStep.mutate(
+                    { ...b, position: idx + 1, parentStepId: parentId, branchLabel: branch },
+                    { onSuccess: () => setAddingAt(null) },
+                  )}
+                />
+              )}
+            </Fragment>
+          ))}
+        </SortableContext>
+      </DndContext>
+
+      {/* Always-visible "Add step" pill at the bottom — also handles the
+          empty-branch case (position 0 / slot(steps.length) collapse). */}
+      {sameSlot(addingAt, slot(steps.length)) ? (
+        <NewStepCard
+          busy={addStep.isPending}
+          elements={elements}
+          testData={testData}
+          onCancel={() => setAddingAt(null)}
+          onSubmit={(b) => addStep.mutate(
+            { ...b, parentStepId: parentId, branchLabel: branch },
+            { onSuccess: () => setAddingAt(null) },
+          )}
+        />
+      ) : (
+        <button
+          onClick={() => setAddingAt(slot(steps.length))}
+          className="w-full h-10 rounded-md border border-dashed border-surface-border text-ink-secondary hover:text-ink-primary hover:border-brand-500/40 hover:bg-surface-muted/40 transition-colors text-xs inline-flex items-center justify-center gap-1.5"
+        >
+          <Plus size={13} /> Add step
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────  IF block card  ──────────────────────────── */
+
+function IfStepCard({
+  step, isEditingMeta, onEditMeta, onCancelEditMeta, onDelete, onSubmitMeta,
+  addingAt, setAddingAt, editingStepId, setEditingStepId,
+  addStep, updateStep, deleteStep, reorder, setLocalSteps,
+  sensors, elements, testData,
+}: {
+  step: StepView;
+  isEditingMeta: boolean;
+  onEditMeta: () => void;
+  onCancelEditMeta: () => void;
+  onDelete: () => void;
+  onSubmitMeta: (b: StepUpdate) => void;
+  addingAt: InsertSlot | null;
+  setAddingAt: (s: InsertSlot | null) => void;
+  editingStepId: number | null;
+  setEditingStepId: (id: number | null) => void;
+  setLocalSteps: (s: StepView[] | null) => void;
+  sensors: ReturnType<typeof useSensors>;
+  elements: any[];
+  testData: any[];
+} & StepListMutations) {
+  const [collapsed, setCollapsed] = useState(false);
+  const thenChildren = step.children.filter((c) => c.branchLabel === "then");
+  const elseChildren = step.children.filter((c) => c.branchLabel === "else");
+  const summary = step.condition ? describeIfCondition(step.condition) : "no condition";
+
+  if (isEditingMeta) {
+    return (
+      <Card className="border-l-2 border-l-warning-500 bg-warning-500/5 p-3">
+        <div className="text-[10px] uppercase tracking-wider font-semibold text-warning-500 mb-3 inline-flex items-center gap-1.5">
+          Edit IF condition
+        </div>
+        <StepEditor
+          initial={{
+            action: step.action,
+            targetElementId: step.targetElement?.id ?? null,
+            dataId: step.data?.id ?? null,
+            literalValue: step.literalValue,
+            expectedResult: step.expectedResult,
+            timeoutMs: step.timeoutMs,
+            retryCount: step.retryCount,
+            screenshotAfter: step.screenshotAfter,
+            condition: step.condition,
+          }}
+          elements={elements}
+          testData={testData}
+          busy={updateStep.isPending}
+          submitLabel="Save"
+          onCancel={onCancelEditMeta}
+          onSubmit={onSubmitMeta}
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-l-2 border-l-warning-500 bg-warning-500/5 p-3 group">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          className="p-0.5 rounded text-warning-500 hover:text-ink-primary"
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </button>
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-warning-500 rounded border border-warning-500/40 bg-warning-500/10 px-1.5 py-0.5">
+          <GitBranch size={11} />
+          IF
+        </span>
+        <span className="text-[11px] text-ink-secondary truncate font-mono">{summary}</span>
+        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={onEditMeta} className="p-1.5 rounded text-ink-muted hover:text-ink-primary hover:bg-surface-muted" title="Edit condition">
+            <Pencil size={13} />
+          </button>
+          <button onClick={onDelete} className="p-1.5 rounded text-ink-muted hover:text-danger-500 hover:bg-surface-muted" title="Delete IF (and children)">
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+
+      {!collapsed && (
+        <div className="mt-3 space-y-3">
+          {/* THEN lane — always render. Its own StepListSection handles the
+              empty case with its bottom "Add step" pill. */}
+          <div className="pl-3 border-l-2 border-l-success-500/40">
+            <div className="text-[10px] uppercase tracking-wider font-semibold text-success-500 mb-2">Then</div>
+            <StepListSection
+              steps={thenChildren}
+              parentId={step.id}
+              branch="then"
+              addingAt={addingAt}
+              setAddingAt={setAddingAt}
+              editingStepId={editingStepId}
+              setEditingStepId={setEditingStepId}
+              addStep={addStep}
+              updateStep={updateStep}
+              deleteStep={deleteStep}
+              reorder={reorder}
+              setLocalSteps={setLocalSteps}
+              sensors={sensors}
+              elements={elements}
+              testData={testData}
+            />
+          </div>
+
+          {/* ELSE lane — opt-in. If empty + not currently being added to,
+              show a pill to create the else branch. */}
+          {elseChildren.length === 0 && !(addingAt?.parentId === step.id && addingAt.branch === "else") ? (
+            <button
+              onClick={() => setAddingAt({ parentId: step.id, branch: "else", position: 0 })}
+              className="w-full inline-flex items-center justify-center gap-1.5 h-9 rounded-md border border-dashed border-surface-border text-ink-muted hover:text-ink-primary hover:border-danger-500/40 hover:bg-danger-500/5 transition-colors text-xs"
+            >
+              <Plus size={12} /> Add ELSE branch
+            </button>
+          ) : (
+            <div className="pl-3 border-l-2 border-l-danger-500/40">
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-danger-500 mb-2">Else</div>
+              <StepListSection
+                steps={elseChildren}
+                parentId={step.id}
+                branch="else"
+                addingAt={addingAt}
+                setAddingAt={setAddingAt}
+                editingStepId={editingStepId}
+                setEditingStepId={setEditingStepId}
+                addStep={addStep}
+                updateStep={updateStep}
+                deleteStep={deleteStep}
+                reorder={reorder}
+                setLocalSteps={setLocalSteps}
+                sensors={sensors}
+                elements={elements}
+                testData={testData}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

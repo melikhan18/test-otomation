@@ -5,7 +5,7 @@ import Combobox, { type ComboOption } from "./Combobox";
 import ActionPicker from "./ActionPicker";
 import {
   STEP_ACTIONS, STEP_ACTION_MAP,
-  type ElementView, type StepAction, type StepCreate, type StepUpdate, type TestDataView,
+  type ElementView, type StepAction, type StepCondition, type StepCreate, type StepUpdate, type TestDataView,
 } from "@/lib/automation";
 import { cn } from "@/lib/cn";
 
@@ -25,6 +25,8 @@ type Props = {
     timeoutMs?: number | null;
     retryCount?: number | null;
     screenshotAfter?: boolean | null;
+    /** Pre-populated IF predicate when editing an IF step. */
+    condition?: StepCondition | null;
   };
   elements: ElementView[];
   testData: TestDataView[];
@@ -51,8 +53,11 @@ export default function StepEditor({
   );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [expectedOpen, setExpectedOpen] = useState<boolean>(!!(initial?.expectedResult));
+  // IF predicate state. Pre-populated when editing an existing IF row.
+  const [condition, setCondition] = useState<StepCondition | null>(initial?.condition ?? null);
 
   const def = STEP_ACTION_MAP[action];
+  const isIf = action === "IF";
 
   const elementOptions = useMemo<ComboOption[]>(() => elements.map((e) => ({
     value: String(e.id),
@@ -78,6 +83,11 @@ export default function StepEditor({
   }
 
   function submit() {
+    if (isIf) {
+      if (!condition) return;
+      onSubmit({ action, condition });
+      return;
+    }
     onSubmit({
       action,
       targetElementId: def.needsElement ? targetElementId : null,
@@ -117,8 +127,18 @@ export default function StepEditor({
         />
       </div>
 
+      {/* IF rows show the condition builder instead of element/value/timeout. */}
+      {isIf && (
+        <ConditionBuilder
+          value={condition}
+          onChange={setCondition}
+          elements={elements}
+          testData={testData}
+        />
+      )}
+
       {/* Element picker */}
-      {def.needsElement && (
+      {!isIf && def.needsElement && (
         <div>
           <span className="label block mb-1.5">Target element</span>
           <Combobox
@@ -132,7 +152,7 @@ export default function StepEditor({
       )}
 
       {/* Value (data ref or literal) */}
-      {def.value === "data-or-literal" && (
+      {!isIf && def.value === "data-or-literal" && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="label">Value source</span>
@@ -172,7 +192,7 @@ export default function StepEditor({
         </div>
       )}
 
-      {def.value === "literal-only" && (
+      {!isIf && def.value === "literal-only" && (
         <div>
           <span className="label block mb-1.5">{def.literalLabel ?? "Value"}</span>
           <input
@@ -184,84 +204,215 @@ export default function StepEditor({
         </div>
       )}
 
-      {/* Expected result (Xray-style) — collapsible row, available for ALL action types.
-          Free-text documentation; not consumed by the runner. */}
-      <div>
-        <button
-          type="button"
-          onClick={() => setExpectedOpen(!expectedOpen)}
-          className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted hover:text-ink-primary"
-        >
-          {expectedOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          Expected result
-          {expectedResult.trim() && !expectedOpen && (
-            <span className="ml-1 text-ink-primary italic truncate max-w-[260px]">
-              · {expectedResult}
-            </span>
-          )}
-        </button>
-        {expectedOpen && (
-          <div className="mt-1.5 pl-4 border-l border-surface-border">
-            <textarea
-              value={expectedResult}
-              onChange={(e) => setExpectedResult(e.target.value)}
-              rows={2}
-              placeholder="What should happen after this step? (e.g. User lands on the dashboard)"
-              className="input resize-y text-xs"
-            />
-            <div className="text-[10px] text-ink-muted mt-1">
-              Documentation only — surfaced in run reports + pseudocode.
-            </div>
+      {/* Expected result + Advanced section — hidden for IF (no docstring,
+          no timeout/retry — those belong to leaf actions). */}
+      {!isIf && (
+        <>
+          <div>
+            <button
+              type="button"
+              onClick={() => setExpectedOpen(!expectedOpen)}
+              className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted hover:text-ink-primary"
+            >
+              {expectedOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              Expected result
+              {expectedResult.trim() && !expectedOpen && (
+                <span className="ml-1 text-ink-primary italic truncate max-w-[260px]">
+                  · {expectedResult}
+                </span>
+              )}
+            </button>
+            {expectedOpen && (
+              <div className="mt-1.5 pl-4 border-l border-surface-border">
+                <textarea
+                  value={expectedResult}
+                  onChange={(e) => setExpectedResult(e.target.value)}
+                  rows={2}
+                  placeholder="What should happen after this step? (e.g. User lands on the dashboard)"
+                  className="input resize-y text-xs"
+                />
+                <div className="text-[10px] text-ink-muted mt-1">
+                  Documentation only — surfaced in run reports + pseudocode.
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Advanced section: timeout, retries, screenshot */}
-      <button
-        onClick={() => setAdvancedOpen(!advancedOpen)}
-        className="inline-flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink-primary"
-      >
-        {advancedOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        Advanced
-      </button>
+          <button
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            className="inline-flex items-center gap-1 text-[11px] text-ink-muted hover:text-ink-primary"
+          >
+            {advancedOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            Advanced
+          </button>
 
-      {advancedOpen && (
-        <div className="grid grid-cols-2 gap-3 pl-4 border-l border-surface-border">
-          {def.hasTimeout && (
-            <label className="block">
-              <span className="label block mb-1">Timeout (ms)</span>
-              <input
-                type="number" min={100} step={500}
-                value={timeoutMs}
-                onChange={(e) => setTimeoutMs(parseInt(e.target.value || "0", 10) || 0)}
-                className="input text-xs"
-              />
-            </label>
+          {advancedOpen && (
+            <div className="grid grid-cols-2 gap-3 pl-4 border-l border-surface-border">
+              {def.hasTimeout && (
+                <label className="block">
+                  <span className="label block mb-1">Timeout (ms)</span>
+                  <input
+                    type="number" min={100} step={500}
+                    value={timeoutMs}
+                    onChange={(e) => setTimeoutMs(parseInt(e.target.value || "0", 10) || 0)}
+                    className="input text-xs"
+                  />
+                </label>
+              )}
+              <label className="block">
+                <span className="label block mb-1">Retries</span>
+                <input
+                  type="number" min={0} max={5}
+                  value={retryCount}
+                  onChange={(e) => setRetryCount(parseInt(e.target.value || "0", 10) || 0)}
+                  className="input text-xs"
+                />
+              </label>
+              <label className="col-span-2 flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox" checked={screenshotAfter}
+                  onChange={(e) => setScreenshotAfter(e.target.checked)}
+                  className="accent-brand-500"
+                />
+                <span className="text-xs">Capture screenshot after this step</span>
+              </label>
+            </div>
           )}
-          <label className="block">
-            <span className="label block mb-1">Retries</span>
-            <input
-              type="number" min={0} max={5}
-              value={retryCount}
-              onChange={(e) => setRetryCount(parseInt(e.target.value || "0", 10) || 0)}
-              className="input text-xs"
-            />
-          </label>
-          <label className="col-span-2 flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox" checked={screenshotAfter}
-              onChange={(e) => setScreenshotAfter(e.target.checked)}
-              className="accent-brand-500"
-            />
-            <span className="text-xs">Capture screenshot after this step</span>
-          </label>
-        </div>
+        </>
       )}
 
       <div className="flex justify-end gap-2 pt-2 border-t border-surface-border">
         <Button variant="secondary" size="sm" onClick={onCancel}>Cancel</Button>
-        <Button variant="primary" size="sm" loading={busy} onClick={submit}>{submitLabel}</Button>
+        <Button variant="primary" size="sm" loading={busy} onClick={submit}
+                disabled={isIf && condition == null}>{submitLabel}</Button>
       </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────  Condition builder  ──────────────────────── */
+
+function ConditionBuilder({
+  value, onChange, elements, testData,
+}: {
+  value: StepCondition | null;
+  onChange: (c: StepCondition | null) => void;
+  elements: ElementView[];
+  testData: TestDataView[];
+}) {
+  const type = value?.type ?? "element_state";
+  function setType(next: "element_state" | "test_data_compare") {
+    if (next === "element_state") {
+      onChange({ type: "element_state", subjectId: elements[0]?.id ?? 0, operator: "is_visible", value: null });
+    } else {
+      onChange({ type: "test_data_compare", subjectId: testData[0]?.id ?? 0, operator: "equals", value: "" });
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-warning-500/30 bg-warning-500/5 p-3">
+      <div className="flex items-center justify-between">
+        <span className="label">Condition</span>
+        <div className="flex border border-surface-border rounded-md overflow-hidden">
+          <button type="button" onClick={() => setType("element_state")}
+                  className={cn("px-2 h-5 text-[9px] uppercase tracking-wider transition-colors",
+                    type === "element_state" ? "bg-warning-500/20 text-warning-500" : "text-ink-muted hover:text-ink-primary")}>
+            Element state
+          </button>
+          <button type="button" onClick={() => setType("test_data_compare")}
+                  className={cn("px-2 h-5 text-[9px] uppercase tracking-wider transition-colors border-l border-surface-border",
+                    type === "test_data_compare" ? "bg-warning-500/20 text-warning-500" : "text-ink-muted hover:text-ink-primary")}>
+            Test data
+          </button>
+        </div>
+      </div>
+
+      {type === "element_state" ? (
+        <ElementStateRow value={value as any} onChange={onChange} elements={elements} />
+      ) : (
+        <TestDataCompareRow value={value as any} onChange={onChange} testData={testData} />
+      )}
+    </div>
+  );
+}
+
+function ElementStateRow({
+  value, onChange, elements,
+}: {
+  value: Extract<StepCondition, { type: "element_state" }> | null;
+  onChange: (c: StepCondition | null) => void;
+  elements: ElementView[];
+}) {
+  const subjectId = value?.subjectId ?? elements[0]?.id ?? 0;
+  const operator  = value?.operator ?? "is_visible";
+  const literal   = value?.value ?? "";
+  const needsValue = operator === "text_contains" || operator === "text_equals";
+
+  function emit(next: Partial<Extract<StepCondition, { type: "element_state" }>>) {
+    onChange({ type: "element_state", subjectId, operator, value: literal, ...next });
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_1fr] gap-2 items-start">
+      <select value={subjectId} onChange={(e) => emit({ subjectId: Number(e.target.value) })}
+              className="input text-xs">
+        <option value="">{elements.length === 0 ? "No elements" : "Pick an element…"}</option>
+        {elements.map((el) => (
+          <option key={el.id} value={el.id}>{el.name} · {el.primaryStrategy}</option>
+        ))}
+      </select>
+      <select value={operator} onChange={(e) => emit({ operator: e.target.value as any })}
+              className="input text-xs">
+        <option value="is_visible">is visible</option>
+        <option value="is_hidden">is hidden</option>
+        <option value="exists">exists</option>
+        <option value="text_contains">text contains</option>
+        <option value="text_equals">text equals</option>
+      </select>
+      {needsValue ? (
+        <input type="text" value={literal ?? ""} onChange={(e) => emit({ value: e.target.value })}
+               placeholder="expected text" className="input text-xs font-mono" />
+      ) : (
+        <span className="text-[10px] text-ink-muted italic self-center pl-1">no value needed</span>
+      )}
+    </div>
+  );
+}
+
+function TestDataCompareRow({
+  value, onChange, testData,
+}: {
+  value: Extract<StepCondition, { type: "test_data_compare" }> | null;
+  onChange: (c: StepCondition | null) => void;
+  testData: TestDataView[];
+}) {
+  const subjectId = value?.subjectId ?? testData[0]?.id ?? 0;
+  const operator  = value?.operator ?? "equals";
+  const literal   = value?.value ?? "";
+
+  function emit(next: Partial<Extract<StepCondition, { type: "test_data_compare" }>>) {
+    onChange({ type: "test_data_compare", subjectId, operator, value: literal, ...next });
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_1fr] gap-2 items-start">
+      <select value={subjectId} onChange={(e) => emit({ subjectId: Number(e.target.value) })}
+              className="input text-xs">
+        <option value="">{testData.length === 0 ? "No test data" : "Pick test data…"}</option>
+        {testData.map((td) => (
+          <option key={td.id} value={td.id}>{td.name} · {td.environment}{td.sensitive ? " 🔒" : ""}</option>
+        ))}
+      </select>
+      <select value={operator} onChange={(e) => emit({ operator: e.target.value as any })}
+              className="input text-xs">
+        <option value="equals">equals</option>
+        <option value="not_equals">not equals</option>
+        <option value="contains">contains</option>
+        <option value="greater_than">greater than</option>
+        <option value="less_than">less than</option>
+      </select>
+      <input type="text" value={literal} onChange={(e) => emit({ value: e.target.value })}
+             placeholder="expected value" className="input text-xs font-mono" />
     </div>
   );
 }
