@@ -14,7 +14,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -u
 
-INTERVAL="${1:-1}"
+# Refresh interval in seconds. Default 0.5 → ~2 visual updates/sec, which
+# is the sweet spot for "feels live without being noisy". Bash `sleep`
+# accepts fractional values (GNU coreutils on Ubuntu/Debian/Mac), so
+# `bash monitor.sh 0.25` or `bash monitor.sh 2` both work.
+#
+# Note: the actual frame rate is bounded by how long `docker stats
+# --no-stream` takes (typically 0.5–1.5s for 10+ containers). Setting
+# this below 0.5 won't go faster than the Docker daemon can answer.
+INTERVAL="${1:-0.5}"
 
 # ── ANSI ───────────────────────────────────────────────────────────────────
 R=$'\033[31m'  # red
