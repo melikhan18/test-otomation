@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowLeftRight, ArrowRight, Ban, Camera, CheckSquare, CircleDot, CircleSlash,
+  ArrowLeft, ArrowLeftRight, ArrowRight, Ban, Camera, CheckSquare, ChevronsDown, CircleDot, CircleSlash,
   Clock, Code2, Equal, Eraser, Eye, EyeOff, GitBranch, Globe, Hand, Hash, Heading1, Hourglass, Keyboard,
   KeyRound, Link, ListChecks, Loader, MessageSquare, MousePointer2, MousePointerClick,
   Regex, RotateCw, Search, Square, Target, TextSearch, ToggleRight, X,
@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
  * data and only the icons we actually use get bundled.
  */
 const ICONS: Record<string, LucideIcon> = {
-  ArrowLeft, ArrowLeftRight, ArrowRight, Ban, Camera, CheckSquare, CircleDot, CircleSlash,
+  ArrowLeft, ArrowLeftRight, ArrowRight, Ban, Camera, CheckSquare, ChevronsDown, CircleDot, CircleSlash,
   Clock, Code2, Equal, Eraser, Eye, EyeOff, GitBranch, Globe, Hand, Hash, Heading1, Hourglass, Keyboard,
   KeyRound, Link, ListChecks, Loader, MessageSquare, MousePointer2, MousePointerClick,
   Regex, RotateCw, Square, Target, TextSearch, ToggleRight,

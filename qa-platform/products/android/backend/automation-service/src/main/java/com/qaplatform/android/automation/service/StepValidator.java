@@ -33,6 +33,16 @@ public final class StepValidator {
                 forbidData(action, dataId);
             }
 
+            // ── element + optional direction literal ─────────────────
+            // SCROLL_TO_ELEMENT needs the element to look for; literalValue
+            // is the optional direction ("down" default | up | left | right).
+            // Invalid directions are caught at run-time by the runner — keeps
+            // the validator simple.
+            case SCROLL_TO_ELEMENT -> {
+                requireElement(action, targetElementId);
+                forbidData(action, dataId);
+            }
+
             // ── element + (data | literal) — content assertions + text input
             case ENTER_TEXT,
                  ASSERT_TEXT_EQUALS, ASSERT_TEXT_CONTAINS,

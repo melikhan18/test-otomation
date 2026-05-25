@@ -107,7 +107,8 @@ export type StepAction =
   // control flow — IF is a tree node, children live in then/else branches.
   | "IF"
   // touch + input
-  | "CLICK" | "LONG_PRESS" | "SWIPE" | "ENTER_TEXT" | "CLEAR" | "PRESS_KEY"
+  | "CLICK" | "LONG_PRESS" | "SWIPE" | "SCROLL_TO_ELEMENT"
+  | "ENTER_TEXT" | "CLEAR" | "PRESS_KEY"
   // wait
   | "WAIT_FOR_VISIBLE" | "WAIT_FOR_INVISIBLE" | "SLEEP"
   // visibility / presence
@@ -592,7 +593,8 @@ export type StepActionDef = {
  *  small (only these get tree-shaken in) and the lib pure-data. */
 export type StepActionIconName =
   | "GitBranch"
-  | "MousePointerClick" | "Hand" | "ArrowLeftRight" | "Keyboard" | "Eraser" | "KeyRound"
+  | "MousePointerClick" | "Hand" | "ArrowLeftRight" | "ChevronsDown"
+  | "Keyboard" | "Eraser" | "KeyRound"
   | "Hourglass" | "EyeOff" | "Clock"
   | "Eye" | "CircleSlash" | "ToggleRight" | "Ban" | "CheckSquare" | "Square" | "CircleDot" | "Target"
   | "Equal" | "TextSearch" | "Regex" | "Hash"
@@ -606,6 +608,7 @@ export const STEP_ACTIONS: StepActionDef[] = [
   { key: "CLICK",                label: "Click",                category: "touch",  needsElement: true,  value: "none",            tone: "blue",   iconName: "MousePointerClick", description: "Tap the target element once." },
   { key: "LONG_PRESS",           label: "Long press",           category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "duration ms (default 1000)", tone: "blue", iconName: "Hand", description: "Touch and hold the element for the given duration." },
   { key: "SWIPE",                label: "Swipe",                category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "direction: up/down/left/right", tone: "blue", iconName: "ArrowLeftRight", description: "Swipe across the element in a direction." },
+  { key: "SCROLL_TO_ELEMENT",    label: "Scroll to element",    category: "touch",  needsElement: true,  value: "literal-only",    literalLabel: "direction (default: down) — where to look: down/up/left/right", tone: "blue", iconName: "ChevronsDown", description: "Repeatedly swipes the screen in the given direction until the target element becomes visible (max 15 swipes). Direction is user-facing — 'down' means 'find content below'." },
   { key: "ENTER_TEXT",           label: "Enter text",           category: "input",  needsElement: true,  value: "data-or-literal", tone: "green",  iconName: "Keyboard", description: "Type text into an input field. Pulls from test data or a literal." },
   { key: "CLEAR",                label: "Clear input",          category: "input",  needsElement: true,  value: "none",            tone: "green",  iconName: "Eraser", description: "Empty the contents of an input field." },
   { key: "PRESS_KEY",            label: "Press key",            category: "input",  needsElement: false, value: "literal-only",    literalLabel: "BACK | HOME | RECENTS | <keyCode>", tone: "green", iconName: "KeyRound", description: "Send a hardware/system key event (BACK, HOME, ENTER, …)." },

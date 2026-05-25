@@ -43,6 +43,12 @@ public class StepRunner {
     public StepResult run(StepEntity step) {
         long t0 = System.currentTimeMillis();
         try {
+            // SCROLL_TO_ELEMENT has its own probe + swipe loop; route it
+            // before the category switch so runTouch doesn't have to special-
+            // case it (would need a different element-resolution flow).
+            if (step.getAction() == StepAction.SCROLL_TO_ELEMENT) {
+                return runScrollTo(step, t0);
+            }
             return switch (categoryOf(step.getAction())) {
                 case TOUCH        -> runTouch(step, t0);
                 case INPUT        -> runInput(step, t0);
@@ -100,6 +106,91 @@ public class StepRunner {
         }
         bridge.control(sessionId, sessionToken, cmd);
         return StepResult.pass(locatorLabel(hit), elapsed(t0));
+    }
+
+    /* ─────────────────────────  SCROLL TO  ─────────────────────────── */
+
+    /**
+     * Probes for the target element; if not visible, swipes the viewport
+     * one full screen in the requested direction and probes again. Repeats
+     * up to {@code MAX_SCROLL_SWIPES} times. The first iteration is a
+     * "free" probe — if the element is already visible, no swipe happens.
+     *
+     * <p>Direction semantics are user-facing, not finger-facing:</p>
+     * <ul>
+     *   <li>{@code down} (default) — look for content below; finger swipes UP</li>
+     *   <li>{@code up} — look for content above; finger swipes DOWN</li>
+     *   <li>{@code right} — look for content to the right; finger swipes LEFT</li>
+     *   <li>{@code left} — look for content to the left; finger swipes RIGHT</li>
+     * </ul>
+     *
+     * <p>This mirrors how users describe the task ("scroll down to find
+     * Turkey in the country list") rather than how their finger moves.</p>
+     */
+    private StepResult runScrollTo(StepEntity step, long t0) {
+        String dir = step.getLiteralValue() == null || step.getLiteralValue().isBlank()
+                ? "down"
+                : step.getLiteralValue().toLowerCase().trim();
+        if (!"up".equals(dir) && !"down".equals(dir) && !"left".equals(dir) && !"right".equals(dir)) {
+            return StepResult.fail(
+                    "SCROLL_TO_ELEMENT direction must be up/down/left/right (was: " + dir + ")",
+                    null, elapsed(t0));
+        }
+
+        final int maxSwipes = 15;
+        final int settleMs = 350;
+
+        for (int i = 0; i <= maxSwipes; i++) {
+            LocatorResolver.Hit hit = resolveElement(step);
+            if (hit != null && hasNonZeroBounds(hit.bounds())) {
+                return StepResult.pass(
+                        "scrolled to " + locatorLabel(hit) + " after " + i + " swipes",
+                        elapsed(t0));
+            }
+            if (i == maxSwipes) break;   // final probe done, no more swipes
+
+            // Read viewport from the inspect tree root. The bridge guarantees
+            // a `root` node with `bounds: [x1, y1, x2, y2]` covering the whole
+            // window (see UIAutomatorDumpAdapter on the agent side).
+            JsonNode tree = bridge.inspect(sessionId, sessionToken, 4);
+            int[] vp = viewportBounds(tree);
+            if (vp == null || (vp[2] - vp[0]) <= 0 || (vp[3] - vp[1]) <= 0) {
+                return StepResult.fail("could not read viewport bounds from inspect tree", null, elapsed(t0));
+            }
+
+            float w = vp[2] - vp[0], h = vp[3] - vp[1];
+            float cx = vp[0] + w / 2f, cy = vp[1] + h / 2f;
+            float sx = cx, sy = cy, ex = cx, ey = cy;
+            switch (dir) {
+                case "down"  -> { sy = vp[1] + h * 0.75f; ey = vp[1] + h * 0.25f; }
+                case "up"    -> { sy = vp[1] + h * 0.25f; ey = vp[1] + h * 0.75f; }
+                case "right" -> { sx = vp[0] + w * 0.75f; ex = vp[0] + w * 0.25f; }
+                case "left"  -> { sx = vp[0] + w * 0.25f; ex = vp[0] + w * 0.75f; }
+            }
+            Map<String, Object> cmd = new LinkedHashMap<>();
+            cmd.put("type", "swipe");
+            cmd.put("startX", sx); cmd.put("startY", sy);
+            cmd.put("endX",   ex); cmd.put("endY",   ey);
+            cmd.put("durationMs", 300L);
+            bridge.control(sessionId, sessionToken, cmd);
+
+            try { Thread.sleep(settleMs); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
+        }
+        return StepResult.fail(
+                "element not visible after " + maxSwipes + " swipes (direction: " + dir + ")",
+                null, elapsed(t0));
+    }
+
+    private static int[] viewportBounds(JsonNode tree) {
+        if (tree == null || !tree.has("root")) return null;
+        JsonNode b = tree.get("root").get("bounds");
+        if (b == null || !b.isArray() || b.size() < 4) return null;
+        return new int[]{ b.get(0).asInt(), b.get(1).asInt(), b.get(2).asInt(), b.get(3).asInt() };
+    }
+
+    private static boolean hasNonZeroBounds(int[] b) {
+        return b != null && (b[2] - b[0]) > 0 && (b[3] - b[1]) > 0;
     }
 
     /* ─────────────────────────  INPUT  ─────────────────────────── */
@@ -212,7 +303,7 @@ public class StepRunner {
             // we bucket it under CONTROL and treat as a no-op if the
             // executor does see one (programmer error guard).
             case IF                                             -> Category.CONTROL;
-            case CLICK, LONG_PRESS, SWIPE                       -> Category.TOUCH;
+            case CLICK, LONG_PRESS, SWIPE, SCROLL_TO_ELEMENT    -> Category.TOUCH;
             case ENTER_TEXT, CLEAR, PRESS_KEY                   -> Category.INPUT;
             case WAIT_FOR_VISIBLE, WAIT_FOR_INVISIBLE, SLEEP    -> Category.WAIT;
             case ASSERT_VISIBLE, ASSERT_NOT_VISIBLE, ASSERT_NOT_PRESENT,

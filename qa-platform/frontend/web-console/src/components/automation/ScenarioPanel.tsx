@@ -362,6 +362,7 @@ function describeStep(st: StepView): string {
     case "CLICK":                return `tap ${el}`;
     case "LONG_PRESS":           return `long press ${el}` + (st.literalValue ? ` for ${st.literalValue}ms` : "");
     case "SWIPE":                return `swipe ${el}` + (st.literalValue ? ` ${st.literalValue}` : "");
+    case "SCROLL_TO_ELEMENT":    return `scroll ${st.literalValue ?? "down"} until ${el} is visible`;
     case "ENTER_TEXT":           return `type ${v()} into ${el}`;
     case "CLEAR":                return `clear ${el}`;
     case "PRESS_KEY":            return `press ${st.literalValue}`;
