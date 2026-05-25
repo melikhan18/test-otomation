@@ -137,22 +137,55 @@ public class StepRunner {
                     null, elapsed(t0));
         }
 
-        final int maxSwipes = 15;
+        ElementEntity el = elements.findById(step.getTargetElementId()).orElse(null);
+        if (el == null) {
+            return StepResult.fail("element catalog entry missing", null, elapsed(t0));
+        }
+
+        final int maxSwipes = 20;
         final int settleMs = 350;
+        // End-of-list detection: if the inspect tree's signature doesn't
+        // change for this many consecutive post-swipe probes, the list has
+        // stopped scrolling (we've hit the top/bottom edge) so further
+        // swipes won't reveal anything new. Short-circuit to fail-fast.
+        final int noProgressBudget = 5;
+        int noProgressCount = 0;
+        Integer prevSignature = null;
 
         for (int i = 0; i <= maxSwipes; i++) {
-            LocatorResolver.Hit hit = resolveElement(step);
+            // Single inspect per iteration — reused for element resolution,
+            // viewport bounds, AND end-of-list detection.
+            JsonNode tree = bridge.inspect(sessionId, sessionToken, 4);
+
+            LocatorResolver.Hit hit = LocatorResolver.resolve(tree, el);
             if (hit != null && hasNonZeroBounds(hit.bounds())) {
                 return StepResult.pass(
                         "scrolled to " + locatorLabel(hit) + " after " + i + " swipes",
                         elapsed(t0));
             }
+
+            // Compare to previous iteration's tree. Same hash N times in a
+            // row = the swipes aren't moving anything = bail. The signature
+            // is JsonNode.toString().hashCode() — cheap, and collisions
+            // false-positive ~once per 4 billion comparisons (we need 5 in
+            // a row, so effectively zero).
+            int signature = tree.toString().hashCode();
+            if (prevSignature != null && signature == prevSignature) {
+                noProgressCount++;
+                if (noProgressCount >= noProgressBudget) {
+                    return StepResult.fail(
+                            "element not visible — list stopped scrolling after " + (i + 1)
+                                    + " swipes (UI unchanged for " + noProgressBudget
+                                    + " consecutive attempts, likely reached end of list)",
+                            null, elapsed(t0));
+                }
+            } else {
+                noProgressCount = 0;
+            }
+            prevSignature = signature;
+
             if (i == maxSwipes) break;   // final probe done, no more swipes
 
-            // Read viewport from the inspect tree root. The bridge guarantees
-            // a `root` node with `bounds: [x1, y1, x2, y2]` covering the whole
-            // window (see UIAutomatorDumpAdapter on the agent side).
-            JsonNode tree = bridge.inspect(sessionId, sessionToken, 4);
             int[] vp = viewportBounds(tree);
             if (vp == null || (vp[2] - vp[0]) <= 0 || (vp[3] - vp[1]) <= 0) {
                 return StepResult.fail("could not read viewport bounds from inspect tree", null, elapsed(t0));

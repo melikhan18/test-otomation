@@ -42,9 +42,10 @@ public enum StepAction {
      * Scroll-until-found. Repeatedly swipes the viewport in the given
      * direction (literalValue: "down" default | "up" | "left" | "right" —
      * the direction in which to LOOK, i.e. "down" reveals lower content)
-     * until the target element from the catalog becomes visible, or a
-     * safety cap of 15 swipes is hit. Solves the classic "find Turkey in
-     * a long country dropdown" pattern in one step.
+     * until the target element from the catalog becomes visible. Two
+     * stop conditions: 20-swipe safety cap, OR end-of-list detected
+     * (5 consecutive swipes that don't change the UI tree). Solves the
+     * "find Turkey in a long country dropdown" pattern in one step.
      */
     SCROLL_TO_ELEMENT,
     ENTER_TEXT,
