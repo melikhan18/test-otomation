@@ -78,8 +78,14 @@ public class ScenarioDtos {
             @Min(0) Integer timeoutMs,
             @Min(0) Integer retryCount,
             Boolean screenshotAfter,
-            /** Insertion index (0-based). When null → append at end. */
-            Integer position
+            /** Insertion index within the target scope; null = append. */
+            Integer position,
+            /** Tree position. Both null = root level (legacy/flat). Both set
+             *  = child inside an IF's "then" or "else" branch. */
+            Long parentStepId,
+            @jakarta.validation.constraints.Pattern(regexp = "then|else") String branchLabel,
+            /** Predicate JSON. Required when action == IF, rejected otherwise. */
+            @Valid com.qaplatform.android.automation.domain.StepCondition condition
     ) {}
 
     public record StepUpdateRequest(
@@ -90,7 +96,9 @@ public class ScenarioDtos {
             String expectedResult,
             @Min(0) Integer timeoutMs,
             @Min(0) Integer retryCount,
-            Boolean screenshotAfter
+            Boolean screenshotAfter,
+            /** Update the IF predicate; ignored for non-IF actions. */
+            @Valid com.qaplatform.android.automation.domain.StepCondition condition
     ) {}
 
     public record ReorderRequest(@NotNull @Valid List<@NotNull Long> stepIds) {}
@@ -98,6 +106,10 @@ public class ScenarioDtos {
     /**
      * Step view with denormalised element / data refs so the editor can render thumbnails
      * and labels without N+1 queries.
+     *
+     * <p>Recursive — {@link #children} is only populated for {@code IF} steps and
+     * is the union of "then" + "else" branch members (each child carries its
+     * own {@link #branchLabel}).</p>
      */
     public record StepView(
             long id,
@@ -111,6 +123,10 @@ public class ScenarioDtos {
             int timeoutMs,
             int retryCount,
             boolean screenshotAfter,
+            Long parentStepId,
+            String branchLabel,
+            com.qaplatform.android.automation.domain.StepCondition condition,
+            List<StepView> children,
             Instant createdAt
     ) {}
 

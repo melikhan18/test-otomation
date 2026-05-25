@@ -27,6 +27,13 @@ package com.qaplatform.android.automation.domain;
  * </pre>
  */
 public enum StepAction {
+    // ── control flow ─────────────────────────────────────────────────
+    // IF is a tree node, not a leaf. It carries a `condition` JSON and
+    // acts as the parent of its child steps, which live under
+    // branch_label = "then" / "else". ELSE is NOT a standalone action —
+    // it's a branch label on an IF's children. Mirrors the WEB stack.
+    IF,
+
     // ── touch / input ────────────────────────────────────────────────
     CLICK,
     LONG_PRESS,

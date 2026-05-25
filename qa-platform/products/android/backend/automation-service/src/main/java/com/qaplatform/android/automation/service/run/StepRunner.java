@@ -49,6 +49,11 @@ public class StepRunner {
                 case WAIT         -> runWait(step, t0);
                 case ASSERT       -> runAssert(step, t0);
                 case UTIL         -> runUtil(step, t0);
+                // Control-flow rows (IF) are handled by the orchestrator's
+                // tree walker, never by StepRunner. If one does slip through
+                // (programmer bug) treat as a no-op PASS so the run doesn't
+                // crash.
+                case CONTROL      -> StepResult.pass(null, elapsed(t0));
             };
         } catch (Exception e) {
             log.warn("step {} threw: {}", step.getId(), e.toString());
@@ -198,10 +203,15 @@ public class StepRunner {
 
     /* ─────────────────────────  helpers  ───────────────────────── */
 
-    enum Category { TOUCH, INPUT, WAIT, ASSERT, UTIL }
+    enum Category { TOUCH, INPUT, WAIT, ASSERT, UTIL, CONTROL }
 
     private static Category categoryOf(StepAction a) {
         return switch (a) {
+            // IF is the orchestrator's responsibility (tree walker picks the
+            // branch); it never reaches StepRunner.dispatch as a leaf, so
+            // we bucket it under CONTROL and treat as a no-op if the
+            // executor does see one (programmer error guard).
+            case IF                                             -> Category.CONTROL;
             case CLICK, LONG_PRESS, SWIPE                       -> Category.TOUCH;
             case ENTER_TEXT, CLEAR, PRESS_KEY                   -> Category.INPUT;
             case WAIT_FOR_VISIBLE, WAIT_FOR_INVISIBLE, SLEEP    -> Category.WAIT;

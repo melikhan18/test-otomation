@@ -59,6 +59,18 @@ public final class StepValidator {
                     throw ApiException.badRequest(action.name() + " requires a literalValue");
                 }
             }
+
+            // ── control flow ─────────────────────────────────────
+            // IF rows carry their meaning in `condition` (validated
+            // separately in ScenarioService); the field-level slots
+            // (element, data, literal) must all be unused.
+            case IF -> {
+                forbidElement(action, targetElementId);
+                forbidData(action, dataId);
+                if (literalValue != null && !literalValue.isBlank()) {
+                    throw ApiException.badRequest("IF does not use literalValue (predicate lives in `condition`)");
+                }
+            }
         }
     }
 

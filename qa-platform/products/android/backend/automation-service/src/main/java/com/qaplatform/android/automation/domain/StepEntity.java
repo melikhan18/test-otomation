@@ -1,6 +1,8 @@
 package com.qaplatform.android.automation.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
 
@@ -29,6 +31,21 @@ public class StepEntity {
     @Column(name = "retry_count", nullable = false)        private int retryCount = 0;
     @Column(name = "screenshot_after", nullable = false)   private boolean screenshotAfter = false;
 
+    /** Tree-model fields. A root-level step has both NULL — matches every
+     *  legacy step that existed before V15. A child step (inside an IF
+     *  branch) carries both: the parent step's id and which branch
+     *  ("then" / "else") it belongs to. */
+    @Column(name = "parent_step_id")
+    private Long parentStepId;
+
+    @Column(name = "branch_label", length = 8)
+    private String branchLabel;
+
+    /** Predicate JSON for IF rows. Shape = {@code StepCondition} record. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "condition", columnDefinition = "JSONB")
+    private String conditionJson;
+
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt = Instant.now();
 
     protected StepEntity() {}
@@ -50,5 +67,8 @@ public class StepEntity {
     public int getTimeoutMs() { return timeoutMs; }          public void setTimeoutMs(int v) { this.timeoutMs = v; }
     public int getRetryCount() { return retryCount; }        public void setRetryCount(int v) { this.retryCount = v; }
     public boolean isScreenshotAfter() { return screenshotAfter; } public void setScreenshotAfter(boolean v) { this.screenshotAfter = v; }
+    public Long getParentStepId() { return parentStepId; }   public void setParentStepId(Long v) { this.parentStepId = v; }
+    public String getBranchLabel() { return branchLabel; }   public void setBranchLabel(String v) { this.branchLabel = v; }
+    public String getConditionJson() { return conditionJson; } public void setConditionJson(String v) { this.conditionJson = v; }
     public Instant getCreatedAt() { return createdAt; }
 }
