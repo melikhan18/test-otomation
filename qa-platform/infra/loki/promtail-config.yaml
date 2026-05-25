@@ -1,0 +1,72 @@
+# Promtail scrapes Docker container stdout/stderr (where our services
+# emit JSON logs via Logstash encoder) and forwards them to Loki with
+# useful labels.
+#
+# Key labels:
+#   compose_service  — e.g. "web-runner-service" (from docker-compose service name)
+#   compose_project  — e.g. "qa-platform"
+#   container        — short docker container name
+#
+# Anything inside the JSON line (service, env, level, runId, suiteRunId,
+# logger_name, ...) stays accessible via `| json` in LogQL — we
+# deliberately DON'T promote them to labels, because high-cardinality
+# labels blow up Loki's index. runId is one-per-run = thousands of
+# distinct values → bad as a label, perfect as a structured field.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+
+    relabel_configs:
+      # Docker SD gives us `__meta_docker_container_*` meta-labels;
+      # promote the useful ones to real labels.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: compose_service
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: compose_project
+      # Drop containers that aren't part of any compose project
+      # (e.g. random docker run experiments on the same host).
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        regex: ''
+        action: drop
+
+    pipeline_stages:
+      # Promtail's docker SD source feeds us frames like:
+      #   {"log":"<actual line>\n","stream":"stdout","time":"..."}
+      # The `docker` stage unwraps that envelope and exposes `log`
+      # as the message body.
+      - docker: {}
+      # For app logs the body itself is JSON (Logstash encoder output).
+      # Parse it so the structured fields are reachable via `| json`
+      # in LogQL queries. Lines that aren't JSON (e.g. Spring's banner
+      # on startup, or stack traces split across lines) pass through
+      # unchanged.
+      - match:
+          selector: '{compose_service=~".+"}'
+          stages:
+            - json:
+                expressions:
+                  level: level
+                  service: service
+            # Promote `level` to a label so users can filter
+            # `{compose_service="X", level="ERROR"}` quickly.
+            # `level` is low-cardinality (5-6 distinct values) so
+            # it's safe to label.
+            - labels:
+                level:
