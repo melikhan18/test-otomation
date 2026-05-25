@@ -875,22 +875,27 @@ function StepListSection({
   const slot = (position: number) => ({ parentId, branch, position });
   return (
     <div className="space-y-2">
-      {/* Prepend affordance for non-empty branches */}
+      {/* Prepend affordance — only for non-empty branches. When the branch
+          is empty, slot(0) collides with slot(steps.length), and the bottom
+          "Add step" pill already covers position 0. Rendering the prepend
+          NewStepCard here too would show two editors at once. */}
       {steps.length > 0 && (
-        <InsertHereLine
-          active={sameSlot(addingAt, slot(0))}
-          onClick={() => setAddingAt(slot(0))}
-        />
-      )}
-      {sameSlot(addingAt, slot(0)) && (
-        <NewStepCard
-          busy={addStep.isPending}
-          onCancel={() => setAddingAt(null)}
-          onSubmit={(b) => addStep.mutate(
-            { ...b, position: 0, parentStepId: parentId, branchLabel: branch },
-            { onSuccess: () => setAddingAt(null) },
+        <>
+          <InsertHereLine
+            active={sameSlot(addingAt, slot(0))}
+            onClick={() => setAddingAt(slot(0))}
+          />
+          {sameSlot(addingAt, slot(0)) && (
+            <NewStepCard
+              busy={addStep.isPending}
+              onCancel={() => setAddingAt(null)}
+              onSubmit={(b) => addStep.mutate(
+                { ...b, position: 0, parentStepId: parentId, branchLabel: branch },
+                { onSuccess: () => setAddingAt(null) },
+              )}
+            />
           )}
-        />
+        </>
       )}
       {steps.map((step, idx) => (
         <Fragment key={step.id}>
